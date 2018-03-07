@@ -44,3 +44,4 @@ rolling.forecast <- function(series, list_subsets, H, fmethod, refit_step){
   
   output <- list(future = future, predictions = predictions)
 }
+
