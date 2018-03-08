@@ -14,9 +14,14 @@ if(length(args) == 0){
   
   idjob <- args[[1]]
   lambda_selection <- args[[2]]
-  towards_pbu <- args[[3]]
-  nb_simulations <- args[[4]]
+  towards_pbu <- as.logical(args[[3]])
+  nb_simulations <- as.integer(args[[4]])
 }
+
+#print(idjob)
+#print(lambda_selection)
+#print(towards_pbu)
+#print(nb_simulations)
 
 stopifnot(lambda_selection %in% c("min", "1se"))
 

@@ -15,7 +15,7 @@ do
 
 flag="$idjob-$towardspbu-$lambdasel"
     
-  Rscript --vanilla $rscript $idjob $towardspbu $lambdasel $nbsimul > "/home/rstudio/sparseHTS/rout/results-$flag.Rout" 2> "/home/rstudio/sparseHTS/rout/errorFile-$flag.Rout" &
+  Rscript --vanilla $rscript $idjob $lambdasel $towardspbu $nbsimul > "/home/rstudio/sparseHTS/rout/results-$flag.Rout" 2> "/home/rstudio/sparseHTS/rout/errorFile-$flag.Rout" &
 
 done
 
