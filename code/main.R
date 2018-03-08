@@ -167,7 +167,7 @@ Ytilde_test_allh[, , , 7] <- Yhat_test_allh
 #}, mc.cores = 8)
 #stop("done")
 
-myfile <- file.path("./work", paste("results_", idjob, "_", towards_pbu, "_", lambda_selection, ".Rdata", sep = ""))
+myfile <- file.path(getwd(), "../work", paste("results_", idjob, "_", towards_pbu, "_", lambda_selection, ".Rdata", sep = ""))
 save(file = myfile, list = c("results"))
 
 
