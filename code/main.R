@@ -1,14 +1,37 @@
 rm(list = ls())
+args = (commandArgs(TRUE))
+if(length(args) == 0){
+  
+  idjob <- 1
+  towards_pbu <- TRUE
+  lambda_selection <- "min"
+  nb_simulations <- 2
+}else{
+  
+  for(i in 1:length(args)){
+    print(args[[i]])
+  }
+  
+  idjob <- args[[1]]
+  lambda_selection <- args[[2]]
+  towards_pbu <- args[[3]]
+  nb_simulations <- args[[4]]
+}
+
+stopifnot(lambda_selection %in% c("min", "1se"))
+
+
 source("packages.R")
 source("bights.R")
-source("new_methods.R")
+source("methods.R")
 source("simulate.R")
 source("simulate_large.R")
 source("utils.R")
 source("hts.R")
 source("code.R")
 
-set.seed(6120)
+#set.seed(6120)
+set.seed(idjob)
 
 experiment <- "2"
 
@@ -26,16 +49,15 @@ n_warm <- 300
 n_simul <- n_warm + T_all
  
 
-M <- 8 * 15
-
+#M <- 8 * 15
 #results <- mclapply(seq(M), function(iteration){
 
 #results <- sapply(seq(M), function(iteration){
 
-results <- vector("list", M)
-for(iteration in seq(M)){
+results <- vector("list", nb_simulations)
+for(i in seq_along(results)){
   
-  print(paste("iteration = ", iteration, sep = ""))
+  print(i)
 
   if(experiment == "1"){
     A <- rbind(c(1, 1, 1, 1), c(1, 1, 0, 0), c(0, 0, 1, 1))
@@ -47,8 +69,8 @@ for(iteration in seq(M)){
     bts <- tail(btsWithWarm, -n_warm)
   }
   
-my_bights <- bights(bts, A)
-H <- 10
+  my_bights <- bights(bts, A)
+  H <- 10
 
 # OLD: data_valid <- make.data(my_bights, list_subsets_valid, H = H)
 # OLD: data_test <- make.data(my_bights, list_subsets_test, H = H)
@@ -70,10 +92,7 @@ Y_test_allh    <- data_test$Y
 glmnet_config <- list(intercept = FALSE, standardize = FALSE, alpha = 1, nfolds = 3, thresh = 10^-5)
 sgl_config    <- list(nfold = 3, standardize = FALSE, alpha = .8)
 
-lambda_selection <- "min"
-#lambda_selection <- "1se"
-towards_pbu <- TRUE
-#towards_pbu <- FALSE
+
 
 nb_methods <- 7
 
@@ -138,52 +157,17 @@ for(h in seq(H)){
 }
 Ytilde_test_allh[, , , 7] <- Yhat_test_allh
 
+# compare with naive forecasts
+# v <- matrix(rep(apply(my_bights$yts[seq(T_learn), ], 2, mean), length(list_subsets_valid)), ncol = 7, byrow = T)
 
-#stop("done")
-#res <- sapply(seq(6), function(imethod){
-#  apply((Ytilde_test_allh[, , , imethod] - Y_test_allh)^2, 1, mean)
-#})
-
-
-res <- sapply(seq(nb_methods), function(imethod){
-  apply((Ytilde_test_allh[, , , imethod] - Y_test_allh)^2, c(1, 2), mean)
-}, simplify = "array")
-
-
-results[[iteration]] <- res
+  results[[i]] <- list(Ytilde_test_allh = Ytilde_test_allh, Y_test_allh = Y_test_allh)
 }
 
 #}, simplify = "array")
-
 #}, mc.cores = 8)
-
-
 #stop("done")
 
-res <- simplify2array(results)
-res <- apply(res, c(1, 2, 3), mean)
-par(mfrow = c(3, 3))
-for(j in seq(7)){
-  #matplot(res[, j, ], lty = 1, type = "l")
-  matplot(res[, j, ])
-}
+myfile <- file.path("./work", paste("results_", idjob, "_", towards_pbu, "_", lambda_selection, ".Rdata", sep = ""))
+save(file = myfile, list = c("results"))
 
-res_overall <- apply(res, c(1, 3), mean)
-matplot(res_overall)
-
-
-#r <- apply(results, c(1, 2), mean)
-#matplot(r)
-
-
-# check if this happens for all series?????? (check aggregates vs bottom, etc)
-# make a final check of my code by plotting cross-validation results and P for different methods
-# WRITE EVERYTHING AS PBU + C ? (see previous code)
-# take a large scale example -> try an exmaple with 100 series at the bottom (shanika example minus some series at the bottom)
-
-
-### ERRORS
-#err <- apply(apply((Y_test_allh - Yhat_test_allh)^2, c(1, 2), mean), 1, sum)
-# compare with naive forecasts
-# v <- matrix(rep(apply(my_bights$yts[seq(T_learn), ], 2, mean), length(list_subsets_valid)), ncol = 7, byrow = T)
 
