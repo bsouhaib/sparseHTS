@@ -20,10 +20,10 @@ getP <- function(beta, obj){
   t(Pprime)
 }
 
-Pfrom_beta <- function(beta){
-  Pprime <- matrix(beta, nrow = n, ncol = m) # n x m
-  P <- t(Pprime)
-}
+#Pfrom_beta <- function(beta){
+#  Pprime <- matrix(beta, nrow = n, ncol = m) # n x m
+#  P <- t(Pprime)
+#}
 
 
 mint_betastar <- function(W, y_hat){

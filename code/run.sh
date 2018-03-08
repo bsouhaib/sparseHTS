@@ -1,11 +1,15 @@
 #!/bin/bash
 
 rscript="main.R"
-njobs=20
+njobs=5
 
 towardspbu=TRUE
+#towardspbu=FALSE
+
 lambdasel="min"
-nbsimul=20
+#lambdasel="1se"
+
+nbsimul=10
 
 
 allidjobs=$(seq 1 $njobs )

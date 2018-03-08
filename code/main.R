@@ -3,7 +3,7 @@ args = (commandArgs(TRUE))
 if(length(args) == 0){
   
   idjob <- 1
-  towards_pbu <- TRUE
+  towards_pbu <- FALSE
   lambda_selection <- "min"
   nb_simulations <- 2
 }else{
@@ -94,13 +94,18 @@ Y_test_allh    <- data_test$Y
 
 # save this in rdata? + tag ?
 
-glmnet_config <- list(intercept = FALSE, standardize = FALSE, alpha = 1, nfolds = 3, thresh = 10^-5)
+glmnet_config <- list(intercept = FALSE, standardize = TRUE, alpha = .98, nfolds = 3, thresh = 10^-5)
 sgl_config    <- list(nfold = 3, standardize = FALSE, alpha = .8)
 
+print(glmnet_config)
+print(sgl_config)
 
 
-nb_methods <- 7
+# naive predictions
+id <- sapply(list_subsets_test, function(vec){vec[2]})
+predictions_naive <- my_bights$yts[id, ]
 
+nb_methods <- 8
 Ytilde_test_allh <- array(NA, c(dim(Yhat_test_allh), nb_methods) )
 
 for(h in seq(H)){
@@ -148,6 +153,9 @@ for(h in seq(H)){
   obj_mint <- mint(my_bights, method = "shrink", residuals = residuals, h = h) # J U and W
   predictions_mint <- predtest(objreg_test, my_bights, obj_mint)
   
+  obj_mintols <- mint(my_bights, method = "ols", h = h) # J U and W
+  predictions_mintols <- predtest(objreg_test, my_bights, obj_mintols)
+  
   # LS
   obj_ls <- mls(objreg_valid, my_bights) 
   predictions_ls <- predtest(objreg_test, my_bights, obj_ls)
@@ -158,21 +166,20 @@ for(h in seq(H)){
   Ytilde_test_allh[h, , , 4] <- t(predictions_bu)
   Ytilde_test_allh[h, , , 5] <- t(predictions_mint)
   Ytilde_test_allh[h, , , 6] <- t(predictions_ls)
-  
+  Ytilde_test_allh[h, , , 7] <- t(predictions_naive)
 }
-Ytilde_test_allh[, , , 7] <- Yhat_test_allh
+Ytilde_test_allh[, , , 8] <- Yhat_test_allh
 
-# compare with naive forecasts
-# v <- matrix(rep(apply(my_bights$yts[seq(T_learn), ], 2, mean), length(list_subsets_valid)), ncol = 7, byrow = T)
-
-  results[[i]] <- list(Ytilde_test_allh = Ytilde_test_allh, Y_test_allh = Y_test_allh)
+#results[[i]] <- list(Ytilde_test_allh = Ytilde_test_allh, Y_test_allh = Y_test_allh)
+myfile <- file.path(getwd(), "../work", paste("results_", idjob, ".", i, "_", towards_pbu, "_", lambda_selection, ".Rdata", sep = ""))
+save(file = myfile, list = c("Ytilde_test_allh", "Y_test_allh"))
 }
 
 #}, simplify = "array")
 #}, mc.cores = 8)
 #stop("done")
 
-myfile <- file.path(getwd(), "../work", paste("results_", idjob, "_", towards_pbu, "_", lambda_selection, ".Rdata", sep = ""))
-save(file = myfile, list = c("results"))
+#myfile <- file.path(getwd(), "../work", paste("results_", idjob, "_", towards_pbu, "_", lambda_selection, ".Rdata", sep = ""))
+#save(file = myfile, list = c("results"))
 
 

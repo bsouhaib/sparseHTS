@@ -20,6 +20,8 @@ learnreg <- function(objreg, objhts, algo, config = NULL, selection = c("min", "
     s <- ifelse(selection == "min", "lambda.min", "lambda.1se")
     idmin_lambda <-  ifelse(selection == "min", match(model$lambda.min, model$lambda), match(model$lambda.1se, model$lambda))
     beta_hat <- as.numeric(coef(cvfit, s = s))
+    
+    
     if(!config$intercept)
       beta_hat <- beta_hat[-1]
   ############
@@ -104,6 +106,8 @@ mint <- function(objhts, method = NULL, residuals = NULL, h = NULL){
   if(is.null(h)){
     h <- 1  
   }
+  
+  if(!is.null(residuals))
   R1 <- t(residuals[h, , ])
   
   if(is.null(method))
@@ -117,6 +121,8 @@ mint <- function(objhts, method = NULL, residuals = NULL, h = NULL){
     target_diagonal <- lowerD(R1)
     shrink_results <- shrink.estim(R1, target_diagonal)
     W <- shrink_results$shrink.cov
+  }else if(method == "ols"){
+    W <- diag(objhts$nts)
   }
  
   MAT1 <- W %*% U
