@@ -2,8 +2,8 @@ rm(list = ls())
 
 nb_methods <- 8
 
-towards_pbu <- TRUE
-#towards_pbu <- FALSE
+#towards_pbu <- TRUE
+towards_pbu <- FALSE
 lambda_selection <- "min"
 #lambda_selection <- "1se"
 
@@ -38,7 +38,7 @@ v <- Reduce("+", results[nbfiles])/nbfiles
 v <- apply(v, c(1, 3), mean)
 matplot(v[seq(3), c(4, 5, 7, 8)])
 
-u <- apply(results[[3]], c(1, 3), mean)
+u <- apply(results[[1]], c(1, 3), mean)
 matplot(u[seq(3), c(4, 5, 7, 8)])
 
 

@@ -13,6 +13,7 @@ makeY <- function(y, obj){
   if(!is.vector(y))
     stop("y must be a vector")
   matrix(y, ncol = obj$nts)
+  # ANY PROBLEM HERE?? always byrom ???
 }
 
 getP <- function(beta, obj){

@@ -1,4 +1,5 @@
 rm(list = ls())
+assign("last.warning", NULL, envir = baseenv())
 args = (commandArgs(TRUE))
 if(length(args) == 0){
   
@@ -18,6 +19,9 @@ if(length(args) == 0){
   nb_simulations <- as.integer(args[[4]])
 }
 
+#set.seed(6120)
+set.seed(idjob)
+
 #print(idjob)
 #print(lambda_selection)
 #print(towards_pbu)
@@ -35,13 +39,12 @@ source("utils.R")
 source("hts.R")
 source("code.R")
 
-#set.seed(6120)
-set.seed(idjob)
 
-experiment <- "2"
+
+experiment <- "1"
 
 fmethod <- "ARIMA"
-fmethod <- "ETS"
+#fmethod <- "ETS"
 
 refit_step <- 40
 
@@ -94,11 +97,12 @@ Y_test_allh    <- data_test$Y
 
 # save this in rdata? + tag ?
 
-glmnet_config <- list(intercept = FALSE, standardize = TRUE, alpha = .98, nfolds = 3, thresh = 10^-5)
-sgl_config    <- list(nfold = 3, standardize = FALSE, alpha = .8)
+#glmnet_config <- list(intercept = TRUE, standardize = TRUE, alpha = .98, nfolds = 3, thresh = 10^-5)
+glmnet_config <- list(intercept = TRUE, standardize = TRUE, alpha = .98, nfolds = 3)
+#sgl_config    <- list(nfold = 3, standardize = FALSE, alpha = .8)
 
 print(glmnet_config)
-print(sgl_config)
+#print(sgl_config)
 
 
 # naive predictions
@@ -115,8 +119,10 @@ for(h in seq(H)){
   Y_valid_h    <- t(Y_valid_allh[h, , ])
   Yhat_test_h  <- t(Yhat_test_allh[h, , ])
   
-  objreg_valid <- list(y = makey(Y_valid_h), X = makeX(Yhat_valid_h, my_bights), Y = Y_valid_h, Yhat = Yhat_valid_h)
-  objreg_test <- list(X = makeX(Yhat_test_h, my_bights), Yhat = Yhat_test_h)
+  objreg_valid <- list(y = makey(Y_valid_h), X = makeX(Yhat_valid_h, my_bights), Y = Y_valid_h, Yhat = Yhat_valid_h, 
+                       Yhat_intercept = cbind(Yhat_valid_h, rep(1, nrow(Yhat_valid_h)) ) )
+  objreg_test <- list(X = makeX(Yhat_test_h, my_bights), Yhat = Yhat_test_h,
+                      Yhat_intercept = cbind(Yhat_test_h, rep(1, nrow(Yhat_test_h)) ) )
   
   
   nValid <- nrow(Yhat_valid_h)

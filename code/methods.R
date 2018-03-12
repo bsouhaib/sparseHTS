@@ -19,11 +19,15 @@ learnreg <- function(objreg, objhts, algo, config = NULL, selection = c("min", "
     cvfit <- model <- do.call(cv.glmnet, c(list(x = X, y = y), config))
     s <- ifelse(selection == "min", "lambda.min", "lambda.1se")
     idmin_lambda <-  ifelse(selection == "min", match(model$lambda.min, model$lambda), match(model$lambda.1se, model$lambda))
-    beta_hat <- as.numeric(coef(cvfit, s = s))
     
+    #browser()
+    #slm.model <- slm.fit(x = X, y = as.numeric(y) )
+    #X2 <- new("matrix.csr", X2)
     
-    if(!config$intercept)
-      beta_hat <- beta_hat[-1]
+    #beta_hat <- as.numeric(coef(cvfit, s = s))
+    #if(!config$intercept)
+    #  beta_hat <- beta_hat[-1]
+    
   ############
   }else if(grepl("SGL", algo)){ 
     if(algo == "SGLrow"){
@@ -43,19 +47,20 @@ learnreg <- function(objreg, objhts, algo, config = NULL, selection = c("min", "
     
     param_list <- param_list[-which(names(param_list) == "nfold")]
     fit_SGL <- model <- do.call(SGL, param_list)
-    beta_hat <- fit_SGL$beta[, idmin_lambda]
+    #beta_hat <- fit_SGL$beta[, idmin_lambda]
     lambda_final <- fit_SGL$lambdas[idmin_lambda]
   }
   
   obj_return <- list(algo = algo, model = model, idmin_lambda = idmin_lambda, s = s, towards_pbu = towards_pbu)
-  if(towards_pbu){
-    c_hat <- beta_hat
-    C <- getP(c_hat, objhts)
-    obj_return <- c(list(C = C), obj_return)
-  }else{
-    P <- getP(beta_hat, objhts)
-    obj_return <- c(list(P = P), obj_return)
-  }
+  
+  #if(towards_pbu){
+  #  c_hat <- beta_hat
+  #  C <- getP(c_hat, objhts)
+  #  obj_return <- c(list(C = C), obj_return)
+  #}else{
+  #  P <- getP(beta_hat, objhts)
+  #  obj_return <- c(list(P = P), obj_return)
+  #}
   
   return(obj_return) 
 }
@@ -80,8 +85,13 @@ predtest <- function(objreg, objhts, objlearn = NULL){
     if(objlearn$towards_pbu){
       matpred <- matpred + predtest(objreg, objhts, bu(objhts))
     }
-  }else{
+  }else if(objlearn$algo %in% c("BU", "MINT") ){
     matpred <-  objreg$Yhat %*% t(objlearn$P) %*% t(objhts$S)
+  }else if(objlearn$algo == "LS"){
+    # INTERCEPT IS INCLUDED HERE
+    matpred <-  objreg$Yhat_intercept %*% t(objlearn$P) %*% t(objhts$S)
+  }else{
+    stop("ERROR IN METHOD'S NAME")
   }
   as.matrix(matpred)
 }
@@ -94,7 +104,8 @@ bu <- function(objhts){
 
 mls <- function(objreg, objhts){
   S <- objhts$S
-  P_LS <- solve(t(S) %*% S) %*% t(S) %*% t(objreg$Y) %*% objreg$Yhat %*% solve(t(objreg$Yhat) %*% objreg$Yhat)
+  #P_LS <- solve(t(S) %*% S) %*% t(S) %*% t(objreg$Y) %*% objreg$Yhat %*% solve(t(objreg$Yhat) %*% objreg$Yhat)
+  P_LS <- solve(t(S) %*% S) %*% t(S) %*% t(objreg$Y) %*% objreg$Yhat_intercept %*% solve(t(objreg$Yhat_intercept) %*% objreg$Yhat_intercept)
   list(algo = "LS", P = P_LS)
 }
 
