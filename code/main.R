@@ -6,7 +6,7 @@ if(length(args) == 0){
   idjob <- 1
   towards_pbu <- FALSE
   lambda_selection <- "min"
-  nb_simulations <- 2
+  nb_simulations <- 5
 }else{
   
   for(i in 1:length(args)){
@@ -40,8 +40,8 @@ source("hts.R")
 source("code.R")
 
 
-
-experiment <- "1"
+sameP_allhorizons <- TRUE
+experiment <- "2"
 
 fmethod <- "ARIMA"
 #fmethod <- "ETS"
@@ -50,6 +50,7 @@ refit_step <- 40
 
 T_train <- 300  
 T_valid <- 200
+#T_valid <- 300
 T_test <- 200
 T_learn <- T_train + T_valid
 T_all <- T_train + T_valid + T_test
@@ -63,6 +64,7 @@ n_simul <- n_warm + T_all
 #results <- sapply(seq(M), function(iteration){
 
 results <- vector("list", nb_simulations)
+nbzeroes <- vector("list", nb_simulations)
 for(i in seq_along(results)){
   
   print(i)
@@ -98,7 +100,10 @@ Y_test_allh    <- data_test$Y
 # save this in rdata? + tag ?
 
 #glmnet_config <- list(intercept = TRUE, standardize = TRUE, alpha = .98, nfolds = 3, thresh = 10^-5)
-glmnet_config <- list(intercept = TRUE, standardize = TRUE, alpha = .98, nfolds = 3)
+config <- list(intercept = FALSE, standardize = TRUE)
+glmnet_config <- c(config, list(alpha = .98, nfolds = 3))
+glmnet_configOLS <- config
+
 #sgl_config    <- list(nfold = 3, standardize = FALSE, alpha = .8)
 
 print(glmnet_config)
@@ -109,9 +114,12 @@ print(glmnet_config)
 id <- sapply(list_subsets_test, function(vec){vec[2]})
 predictions_naive <- my_bights$yts[id, ]
 
-nb_methods <- 8
+# add mean predictions
+
+nb_methods <- 10
 Ytilde_test_allh <- array(NA, c(dim(Yhat_test_allh), nb_methods) )
 
+objlearn_glmnet <- NULL
 for(h in seq(H)){
   print(paste("h = ", h, sep = ""))
 
@@ -131,10 +139,22 @@ for(h in seq(H)){
   glmnet_config_local$nfolds <- NA
   
   ##
-  objlearn_glmnet <- learnreg(objreg_valid, my_bights, "glmnet", 
-                       config = glmnet_config_local, 
-                       selection = lambda_selection, towards_pbu = towards_pbu)
+  if(!sameP_allhorizons || (sameP_allhorizons && h == 1) ){
+    objlearn_glmnet <- learnreg(objreg_valid, my_bights, "glmnet", 
+                                config = glmnet_config_local, 
+                                selection = lambda_selection, towards_pbu = towards_pbu)
+    #print(objlearn_glmnet$number_zeroes)
+    #print(objlearn_glmnet$P)
+    nbzeroes[[i]] <- objlearn_glmnet$number_zeroes
+    
+    objlearn_glmnetOLS <- learnreg(objreg_valid, my_bights, "glmnetOLS", 
+                                config = glmnet_configOLS, 
+                                selection = lambda_selection, towards_pbu = towards_pbu)
+    #print(objlearn_glmnetOLS$number_zeroes)
+    #print(objlearn_glmnetOLS$P)
+  }
   predictions_glmnet <- predtest(objreg_test, my_bights, objlearn_glmnet)
+  predictions_glmnetOLS <- predtest(objreg_test, my_bights, objlearn_glmnetOLS)
   
   ##
   if(FALSE){
@@ -163,23 +183,29 @@ for(h in seq(H)){
   predictions_mintols <- predtest(objreg_test, my_bights, obj_mintols)
   
   # LS
-  obj_ls <- mls(objreg_valid, my_bights) 
-  predictions_ls <- predtest(objreg_test, my_bights, obj_ls)
+  #obj_ls <- mls(objreg_valid, my_bights) 
+  #predictions_ls <- predtest(objreg_test, my_bights, obj_ls)
 
   Ytilde_test_allh[h, , , 1] <- t(predictions_glmnet)
   #Ytilde_test_allh[h, , , 2] <- t(predictions_sglrow)
   #Ytilde_test_allh[h, , , 3] <- t(predictions_sglcol)
   Ytilde_test_allh[h, , , 4] <- t(predictions_bu)
   Ytilde_test_allh[h, , , 5] <- t(predictions_mint)
-  Ytilde_test_allh[h, , , 6] <- t(predictions_ls)
+  #Ytilde_test_allh[h, , , 6] <- t(predictions_ls)
   Ytilde_test_allh[h, , , 7] <- t(predictions_naive)
+  Ytilde_test_allh[h, , , 8] <- t(predictions_glmnetOLS)
+  Ytilde_test_allh[h, , , 9] <- t(predictions_mintols)
 }
-Ytilde_test_allh[, , , 8] <- Yhat_test_allh
+Ytilde_test_allh[, , , 10] <- Yhat_test_allh
+
+
 
 #results[[i]] <- list(Ytilde_test_allh = Ytilde_test_allh, Y_test_allh = Y_test_allh)
 myfile <- file.path(getwd(), "../work", paste("results_", idjob, ".", i, "_", towards_pbu, "_", lambda_selection, ".Rdata", sep = ""))
 save(file = myfile, list = c("Ytilde_test_allh", "Y_test_allh"))
 }
+
+#print(as.numeric(nbzeroes))
 
 #}, simplify = "array")
 #}, mc.cores = 8)

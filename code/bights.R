@@ -3,7 +3,7 @@ fit_fct <- function(series, fmethod = c("ARIMA", "ETS")){
   if(fmethod == "ARIMA"){
     model <- auto.arima(series, seasonal = FALSE, 
                         ic = "aic", max.p = 2, max.q = 2, 
-                        approximation = TRUE, stationary = TRUE)
+                        approximation = TRUE, stationary = FALSE)
   }else if(fmethod == "ETS"){
     model <- ets(series)
   }

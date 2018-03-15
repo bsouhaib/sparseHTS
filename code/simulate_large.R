@@ -333,5 +333,5 @@ simulte_large_hts <- function(n){
   
   S <- smatrix(sim.hts)
   A <- head(S, nrow(S) - ncol(S))
-  list(A = A, bts = allB)
+  list(A = A, bts = allB, sim.hts = sim.hts)
 }

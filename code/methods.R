@@ -14,20 +14,28 @@ learnreg <- function(objreg, objhts, algo, config = NULL, selection = c("min", "
   lambda_final <- NULL
   s  <- NULL
   ############
-  if(algo == "glmnet"){
+  if(algo == "glmnet" || algo == "glmnetOLS"){
     
-    cvfit <- model <- do.call(cv.glmnet, c(list(x = X, y = y), config))
-    s <- ifelse(selection == "min", "lambda.min", "lambda.1se")
-    idmin_lambda <-  ifelse(selection == "min", match(model$lambda.min, model$lambda), match(model$lambda.1se, model$lambda))
+    if(algo == "glmnetOLS"){
+      cvfit <- model <- do.call(glmnet, c(list(x = X, y = y), config))
+      s <- 0
+      idmin_lambda <- NULL
+    }else{
+      model <- do.call(glmnet, c(list(x = X, y = y), config[!names(config) %in% c("foldid", "nfolds") ]))
+      mylambdas <- c(model$lambda, seq(tail(model$lambda, 1), 0,length.out = 25))
+      cvfit <- model <- do.call(cv.glmnet, c(list(x = X, y = y), config, list(lambda = mylambdas)))
+      s <- ifelse(selection == "min", "lambda.min", "lambda.1se")
+      idmin_lambda <-  ifelse(selection == "min", match(model$lambda.min, model$lambda), match(model$lambda.1se, model$lambda))
+    }
     
-    #browser()
+    browser()
     #slm.model <- slm.fit(x = X, y = as.numeric(y) )
     #X2 <- new("matrix.csr", X2)
     
-    #beta_hat <- as.numeric(coef(cvfit, s = s))
-    #if(!config$intercept)
-    #  beta_hat <- beta_hat[-1]
-    
+    beta_hat <- as.numeric(coef(cvfit, s = s))
+    if(!config$intercept)
+      beta_hat <- beta_hat[-1]
+    number_zeroes <- length(which(abs(beta_hat) < 10^-16))
   ############
   }else if(grepl("SGL", algo)){ 
     if(algo == "SGLrow"){
@@ -51,16 +59,17 @@ learnreg <- function(objreg, objhts, algo, config = NULL, selection = c("min", "
     lambda_final <- fit_SGL$lambdas[idmin_lambda]
   }
   
-  obj_return <- list(algo = algo, model = model, idmin_lambda = idmin_lambda, s = s, towards_pbu = towards_pbu)
+  obj_return <- list(algo = algo, model = model, idmin_lambda = idmin_lambda, s = s, towards_pbu = towards_pbu,
+                     number_zeroes = number_zeroes)
   
-  #if(towards_pbu){
-  #  c_hat <- beta_hat
-  #  C <- getP(c_hat, objhts)
-  #  obj_return <- c(list(C = C), obj_return)
-  #}else{
-  #  P <- getP(beta_hat, objhts)
-  #  obj_return <- c(list(P = P), obj_return)
-  #}
+  if(towards_pbu){
+    c_hat <- beta_hat
+    C <- getP(c_hat, objhts)
+    obj_return <- c(list(C = C), obj_return)
+  }else{
+    P <- getP(beta_hat, objhts)
+    obj_return <- c(list(P = P), obj_return)
+  }
   
   return(obj_return) 
 }
@@ -70,8 +79,8 @@ predtest <- function(objreg, objhts, objlearn = NULL){
   X_test <- as.matrix(objreg$X)
   algo <- objlearn$algo
   
-  if(algo == "glmnet" || grepl("SGL", algo)){  
-    if(algo == "glmnet"){
+  if(algo == "glmnet" || algo == "glmnetOLS" || grepl("SGL", algo)){  
+    if(algo == "glmnet" || algo == "glmnetOLS"){
       vecpred <- as.numeric(predict(objlearn$model, newx = X_test, type = "response", s = objlearn$s))
     }else if(grepl("SGL", algo)){
       idmin_lambda <- objlearn$idmin_lambda
