@@ -1,14 +1,4 @@
-fit_fct <- function(series, fmethod = c("ARIMA", "ETS")){
-  match.arg(fmethod)
-  if(fmethod == "ARIMA"){
-    model <- auto.arima(series, seasonal = FALSE, 
-                        ic = "aic", max.p = 2, max.q = 2, 
-                        approximation = TRUE, stationary = FALSE)
-  }else if(fmethod == "ETS"){
-    model <- ets(series)
-  }
-  model
-}
+
 
 make.data <- function(obj_bights, list_subsets, H){
   list_basef <- lapply(list_subsets, function(ts_split){

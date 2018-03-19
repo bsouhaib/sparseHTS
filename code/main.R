@@ -138,6 +138,9 @@ for(h in seq(H)){
   glmnet_config_local <- c(glmnet_config, list(foldid = foldid))
   glmnet_config_local$nfolds <- NA
   
+  
+  # objmethod <- list(algo = "LASSO", towards = pbu(objhts), config = list())  !!!!
+  
   ##
   if(!sameP_allhorizons || (sameP_allhorizons && h == 1) ){
     objlearn_glmnet <- learnreg(objreg_valid, my_bights, "glmnet", 

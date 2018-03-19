@@ -1,7 +1,24 @@
+pbu <- function(objhts){
+  
+  #0_{m x (n-m)} I_m
+  P_BU <- Matrix(0, nrow = objhts$nbts, ncol = objhts$nts, sparse = T)
+  P_BU[cbind(seq(objhts$nbts), seq(objhts$nts - objhts$nbts + 1, objhts$nts)) ] <- 1
+  P_BU
+  #P_BU <- cbind(matrix(0, objhts$nbts, objhts$nts - objhts$nbts), diag(objhts$nbts))
+}
+  
+fct_vec <- function(X){
+  x <- X
+  dim(x) <- c(dim(x)[1] * dim(x)[2], 1)
+  x
+}
 
+fct_inv_vec <- function(x, nrows, ncolumns){
+  matrix(x, nrow = nrows, ncol = ncolumns)
+}
 
 makeX <- function(Yhat, obj){
-  Matrix(Matrix::kronecker(obj$S, Yhat), sparse = T)
+  Matrix::kronecker(obj$S, Yhat)
 }
 makey <- function(Y){
   y <- Y

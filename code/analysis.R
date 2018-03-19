@@ -1,7 +1,10 @@
 rm(list = ls())
 
 nb_methods <- 10
-name_methods <- c("LASSO", "SGLROW", "SGLCOL", "BU", "MINT", "LS", "NAIVE", "LSglmnet", "MINTOLS", "BASE")
+#name_methods <- c("LASSO", "SGLROW", "SGLCOL", "BU", "MINT", "LS", "NAIVE", "LSglmnet", "MINTOLS", "BASE")
+#color_methods <- c("red", "blue", "blue", "orange", "purple", "green", "brown", "darkgreen", "grey", "black")
+
+name_methods <- c("LASSO", "LASSO_TO_PBU", "SGLCOL", "BU", "MINT", "LS", "NAIVE", "LSglmnet", "MINTOLS", "BASE")
 color_methods <- c("red", "blue", "blue", "orange", "purple", "green", "brown", "darkgreen", "grey", "black")
 
 #nb_methods <- 9
