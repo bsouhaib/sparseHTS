@@ -3,18 +3,24 @@ assign("last.warning", NULL, envir = baseenv())
 args = (commandArgs(TRUE))
 if(length(args) == 0){
   
-  idjob <- 200
-  lambda_selection <- "1se"
+  experiment <- "small"
+  idjob <- 220
   nb_simulations <- 500
+  fmethod_agg <- "AR1"
+  fmethod_bot <- "AR1"
+  lambda_selection <- "1se"
 }else{
   
   for(i in 1:length(args)){
     print(args[[i]])
   }
   
-  idjob <- args[[1]]
-  lambda_selection <- args[[2]]
+  experiment <- args[[1]]
+  idjob <- as.integer(args[[2]])
   nb_simulations <- as.integer(args[[3]])
+  fmethod_agg <- args[[4]]
+  fmethod_bot <- args[[5]]
+  lambda_selection <- args[[6]]
 }
 
 #set.seed(6120)
@@ -40,15 +46,6 @@ source("code.R")
 nb_methods <- 13
 
 sameP_allhorizons <- TRUE
-
-experiment <- "small"
-
-fmethod_agg <- "AR1"
-fmethod_bot <- "AR1"
-
-#fmethod <- "ARIMA"
-#fmethod <- "ETS"
-
 refit_step <- 40
 
 T_train <- 300  
@@ -83,17 +80,19 @@ for(i in seq_along(results)){
   }
   
   my_bights <- bights(bts, A)
-  H <- 10
+  H <- 2
 
 # OLD: data_valid <- make.data(my_bights, list_subsets_valid, H = H)
 # OLD: data_test <- make.data(my_bights, list_subsets_test, H = H)
 
+print(paste("Start forecasting in validation -", base::date(), sep = ""))
 ### valid
 list_subsets_valid <- lapply(seq(T_train, T_learn - H), function(i){c(i - T_train + 1, i)})
 data_valid <- makeMatrices(my_bights, list_subsets_valid, H = H, fmethod_agg = fmethod_agg, fmethod_bot = fmethod_bot, refit_step = refit_step)
 Yhat_valid_allh <- data_valid$Yhat
 Y_valid_allh     <- data_valid$Y
 
+print(paste("Start forecasting in testing -", base::date(), sep = ""))
 ### test
 list_subsets_test <- lapply(seq(T_learn, T_all - H), function(i){c(i - T_learn + 1, i)}) # I CHANGED it from T_TRAIN TO T_LEARN !!
 data_test <- makeMatrices(my_bights, list_subsets_test, H = H, fmethod_agg = fmethod_agg, fmethod_bot = fmethod_bot, refit_step = refit_step)
@@ -103,16 +102,15 @@ Y_test_allh    <- data_test$Y
 # save this in rdata? + tag ?
 
 #glmnet_config <- list(intercept = TRUE, standardize = TRUE, alpha = .98, nfolds = 3, thresh = 10^-5)
-config <- list(intercept = FALSE, standardize = FALSE)
-glmnet_config <- c(config, list(alpha = .98, nfolds = 3))
-glmnet_configOLS <- config
+#config <- list(intercept = FALSE, standardize = FALSE)
+#glmnet_config <- c(config, list(alpha = .98, nfolds = 3))
+#glmnet_configOLS <- config
 
-config_basic <- list(intercept = FALSE, standardize = FALSE, alpha = .98)
+config_basic <- list(intercept = FALSE, standardize = FALSE, alpha = .98, thresh = 10^-6)
 config <- list(glmnet = config_basic, cvglmnet = c(config_basic, list(nfolds = 3)))
 
 #sgl_config    <- list(nfold = 3, standardize = FALSE, alpha = .8)
-
-print(glmnet_config)
+#print(glmnet_config)
 #print(sgl_config)
 
 
@@ -141,7 +139,7 @@ for(h in seq(H)){
   #print(date())
   
   nValid <- nrow(Yhat_valid_h)
-  foldid <- rep(sample(seq(glmnet_config$nfolds), nValid, replace = T), my_bights$nts)
+  foldid <- rep(sample(seq(config$cvglmnet$nfolds), nValid, replace = T), my_bights$nts)
   #glmnet_config_local <- c(glmnet_config, list(foldid = foldid))
   #glmnet_config_local$nfolds <- NA
   config$cvglmnet$foldid <- foldid
@@ -158,13 +156,16 @@ for(h in seq(H)){
     #objmethod <- list(algo = "GGLASSO", Ptowards = pbu(my_bights), config = config, selection = lambda_selection)
     #objlearn_GGLASSO_towardspbu <- new_learnreg(objreg_valid, my_bights, objmethod)
     
+    print(paste("Start LASSO -", base::date(), sep = ""))
     # LASSO
     objmethod <- list(algo = "LASSO", Ptowards = NULL, config = config, selection = lambda_selection)
     objlearn_LASSO <- new_learnreg(objreg_valid, my_bights, objmethod)
     
+    print(paste("Start LASSO-PBU -", base::date(), sep = ""))
     objmethod <- list(algo = "LASSO", Ptowards = pbu(my_bights), config = config, selection = lambda_selection)
     objlearn_LASSO_towardspbu <- new_learnreg(objreg_valid, my_bights, objmethod)
     
+    print(paste("Start LS -", base::date(), sep = ""))
     # OLS
     objmethod <- list(algo = "OLS", Ptowards = NULL, config = config, selection = lambda_selection)
     objlearn_OLS <- new_learnreg(objreg_valid, my_bights, objmethod)
@@ -173,9 +174,11 @@ for(h in seq(H)){
     config_ridge$glmnet$alpha <- 0
     config_ridge$cvglmnet$alpha <- 0 # !!!!!!!
     
+    print(paste("Start RIDGE -", base::date(), sep = ""))
     objmethod <- list(algo = "LASSO", Ptowards = NULL, config = config_ridge, selection = lambda_selection)
     objlearn_RIDGE <- new_learnreg(objreg_valid, my_bights, objmethod)
     
+    print(paste("Start RIDGE-PBU -", base::date(), sep = ""))
     objmethod <- list(algo = "LASSO", Ptowards = pbu(my_bights), config = config_ridge, selection = lambda_selection)
     objlearn_RIDGE_towardspbu <- new_learnreg(objreg_valid, my_bights, objmethod)
     
@@ -188,6 +191,8 @@ for(h in seq(H)){
   predictions_OLS <- new_predtest(objreg_test, my_bights, objlearn_OLS)
   predictions_RIDGE <- new_predtest(objreg_test, my_bights, objlearn_RIDGE)
   predictions_RIDGE_towardspbu <- new_predtest(objreg_test, my_bights, objlearn_RIDGE_towardspbu)
+  
+  print(paste("END PREDICTIONS -", base::date(), sep = ""))
   
   #predictions_GGLASSO <- 0
   #predictions_GGLASSO_towardspbu <- 0
@@ -254,6 +259,8 @@ for(h in seq(H)){
   #Ytilde_test_allh[h, , , 11] <- t(predictions_GGLASSO_towardspbu)
   Ytilde_test_allh[h, , , 12] <- t(predictions_RIDGE_towardspbu)
   #print(date())
+  
+  print(paste("FINISH ALL -", base::date(), sep = ""))
 }
 Ytilde_test_allh[, , , 13] <- Yhat_test_allh
 
