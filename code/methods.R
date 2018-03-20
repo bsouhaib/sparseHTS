@@ -47,14 +47,13 @@ new_learnreg <- function(objreg, objhts, objmethod){
   X <- makeX(Yhat_scaled, objhts)
 
   algo <- objmethod$algo
+  config <- objmethod$config
   if(algo == "LASSO" || algo == "OLS"){
-    config <- objmethod$config
-    
     model <- do.call(glmnet, c(list(x = X, y = y), config$glmnet)) 
     if(algo == "OLS"){
       s <- 0
     }else if(algo == "LASSO"){
-      mylambdas <- c(model$lambda, seq(tail(model$lambda, 1), 0,length.out = 25))
+      mylambdas <- c(model$lambda, seq(tail(model$lambda, 1), 0,length.out = 10))
       model <- do.call(cv.glmnet, c(list(x = X, y = y), config$cvglmnet , list(lambda = mylambdas)))
       s <- ifelse(objmethod$selection == "min", "lambda.min", "lambda.1se")
       
@@ -62,8 +61,8 @@ new_learnreg <- function(objreg, objhts, objmethod){
     }
   }else if(algo == "GGLASSO"){
     group1 <- rep(seq(objhts$nts), objhts$nbts)
-    #browser()
-    model <- cv.gglasso(x = as.matrix(X), y = y, group=group1, pred.loss="L2", foldid = config$cvglmnet$foldid, intercept = FALSE)
+    #model <- cv.gglasso(x = as.matrix(X), y = y, group=group1, pred.loss="L2", foldid = config$cvglmnet$foldid, intercept = FALSE)
+    model <- do.call(cv.gglasso, c(list(x = as.matrix(X), y = y, group = group1, pred.loss = "L2"), config))
     s <- ifelse(objmethod$selection == "min", "lambda.min", "lambda.1se")
   }
   

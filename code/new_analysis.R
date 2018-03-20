@@ -1,9 +1,9 @@
 rm(list = ls())
 source("nicefigs.R")
 
-experiment <- "small"
-fmethod_agg <- "AR1"
-fmethod_bot <- "ARIMA"
+experiment <- "large"
+fmethod_agg <- "ARIMA"
+fmethod_bot <- "AR1"
 
 #fmethod_agg <- "AR1"
 #lambda_selection <- "min"
@@ -20,7 +20,7 @@ color_methods <- c("red", "blue", "cyan", "orange", "purple", "green", "brown", 
 
 
 id_jobs <- c(200)
-nb_simulations <- 500
+nb_simulations <- 7
 ids_simulations <- seq(nb_simulations)
 #ids_simulations <- 37
 
@@ -121,9 +121,9 @@ v <- sapply(myresults, function(mat){
 })
 v <- t(v)
 colnames(v) <- name_methods[id.keep]
-boxplot(v, outline = F, 
+boxplot(log(v), outline = F, 
         main = paste(fmethod_agg, "-", fmethod_bot, " - ", "Total"), cex = .5, col = color_methods[id.keep])
-abline(h = min(apply(v, 2, median)), col = "red")
+abline(h = min(log(apply(v, 2, median))), col = "red")
 
 for(j in seq(7)){
   v <- sapply(myresults, function(mat){
@@ -131,8 +131,8 @@ for(j in seq(7)){
   })
   v <- t(v)
   colnames(v) <- name_methods[id.keep]
-  boxplot(v, outline = F, main = j, col = color_methods[id.keep])
-  abline(h = min(apply(v, 2, median)), col = "red")
+  boxplot(log(v), outline = F, main = j, col = color_methods[id.keep])
+  abline(h = min(log(apply(v, 2, median))), col = "red")
   #boxplot(v - v[, "BASE"], outline = F)
   #stop("done")
 }

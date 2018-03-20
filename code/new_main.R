@@ -3,7 +3,7 @@ assign("last.warning", NULL, envir = baseenv())
 args = (commandArgs(TRUE))
 if(length(args) == 0){
   
-  experiment <- "small"
+  experiment <- "large"
   idjob <- 220
   nb_simulations <- 500
   fmethod_agg <- "AR1"
@@ -106,8 +106,9 @@ Y_test_allh    <- data_test$Y
 #glmnet_config <- c(config, list(alpha = .98, nfolds = 3))
 #glmnet_configOLS <- config
 
-config_basic <- list(intercept = FALSE, standardize = FALSE, alpha = .98, thresh = 10^-6)
+config_basic <- list(intercept = FALSE, standardize = FALSE, alpha = .98, thresh = 10^-6, nlambda = 50)
 config <- list(glmnet = config_basic, cvglmnet = c(config_basic, list(nfolds = 3)))
+config_gglasso <- list(eps = 10^-6, nlambda = 50, intercept = FALSE, maxit = 1e+7)
 
 #sgl_config    <- list(nfold = 3, standardize = FALSE, alpha = .8)
 #print(glmnet_config)
@@ -144,16 +145,17 @@ for(h in seq(H)){
   #glmnet_config_local$nfolds <- NA
   config$cvglmnet$foldid <- foldid
   config$cvglmnet$nfolds <- NA
+  config_gglasso$foldid <- foldid
   
  # print(date())
   #stop("done")
   ##
   if(!sameP_allhorizons || (sameP_allhorizons && h == 1) ){
     
-    #objmethod <- list(algo = "GGLASSO", Ptowards = NULL, config = config, selection = lambda_selection)
+    #objmethod <- list(algo = "GGLASSO", Ptowards = NULL, config = config_gglasso, selection = lambda_selection)
     #objlearn_GGLASSO <- new_learnreg(objreg_valid, my_bights, objmethod)
     
-    #objmethod <- list(algo = "GGLASSO", Ptowards = pbu(my_bights), config = config, selection = lambda_selection)
+    #objmethod <- list(algo = "GGLASSO", Ptowards = pbu(my_bights), config = config_gglasso, selection = lambda_selection)
     #objlearn_GGLASSO_towardspbu <- new_learnreg(objreg_valid, my_bights, objmethod)
     
     print(paste("Start LASSO -", base::date(), sep = ""))
