@@ -1,8 +1,10 @@
 rm(list = ls())
 source("nicefigs.R")
 
+tag <- "bias"
+
 experiment <- "small"
-fmethod_agg <- "ETS"
+fmethod_agg <- "ARIMA"
 fmethod_bot <- "ARIMA"
 
 #fmethod_agg <- "AR1"
@@ -19,8 +21,8 @@ color_methods <- c("red", "blue", "cyan", "orange", "purple", "green", "brown", 
 #color_methods <- c("red", "blue", "cyan", "orange", "purple", "green", "brown", "darkgreen", "grey", "black")
 
 
-id_jobs <- c(220)
-nb_simulations <- 500
+id_jobs <- seq(400, 450) #420 #seq(200, 210) #420 #c(200, 210)
+nb_simulations <- 20
 ids_simulations <- seq(nb_simulations)
 #ids_simulations <- 37
 
@@ -112,7 +114,8 @@ if(TRUE){
 # 
 }
 
-savepdf(paste("results_", experiment, "_", fmethod_agg, "_", fmethod_bot, sep = ""), height = 26 * 0.9)
+do.log <- FALSE
+savepdf(paste("results_", experiment, "_", fmethod_agg, "_", fmethod_bot, "_", tag, sep = ""), height = 26 * 0.9)
 par(mfrow = c(4, 2))
 par(cex.axis=.4)
 
@@ -121,9 +124,16 @@ v <- sapply(myresults, function(mat){
 })
 v <- t(v)
 colnames(v) <- name_methods[id.keep]
-boxplot(log(v), outline = F, 
+final_v <- v
+final_medians <- apply(v, 2, median)
+if(do.log){
+  final_v <- log(final_v)
+  final_medians <- log(final_medians)
+}
+mymin <- min(final_medians)
+boxplot(final_v, outline = F, 
         main = paste(fmethod_agg, "-", fmethod_bot, " - ", "Total - ", nbfiles), cex = .5, col = color_methods[id.keep])
-abline(h = min(log(apply(v, 2, median))), col = "red")
+abline(h = mymin, col = "red")
 
 for(j in seq(7)){
   v <- sapply(myresults, function(mat){
@@ -131,8 +141,17 @@ for(j in seq(7)){
   })
   v <- t(v)
   colnames(v) <- name_methods[id.keep]
-  boxplot(log(v), outline = F, main = j, col = color_methods[id.keep])
-  abline(h = min(log(apply(v, 2, median))), col = "red")
+  
+  final_v <- v
+  final_medians <- apply(v, 2, median)
+  if(do.log){
+    final_v <- log(final_v)
+    final_medians <- log(final_medians)
+  }
+  mymin <- min(final_medians)
+  
+  boxplot(final_v, outline = F, main = j, col = color_methods[id.keep])
+  abline(h = mymin, col = "red")
   #boxplot(v - v[, "BASE"], outline = F)
   #stop("done")
 }

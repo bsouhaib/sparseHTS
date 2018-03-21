@@ -4,10 +4,10 @@ args = (commandArgs(TRUE))
 if(length(args) == 0){
   
   experiment <- "small"
-  idjob <- 220
+  idjob <- 420
   nb_simulations <- 500
   fmethod_agg <- "ARIMA"
-  fmethod_bot <- "ETS"
+  fmethod_bot <- "ARIMA"
   lambda_selection <- "1se"
 }else{
   
@@ -43,6 +43,12 @@ source("utils.R")
 source("hts.R")
 source("code.R")
 
+add.bias <- TRUE
+if(add.bias)
+{
+  print("CAREFUL !!!!!! BIAS IS ADDED !!!!!")
+}
+
 nb_methods <- 13
 
 sameP_allhorizons <- TRUE
@@ -67,7 +73,8 @@ results <- vector("list", nb_simulations)
 nbzeroes <- vector("list", nb_simulations)
 for(i in seq_along(results)){
   
-  print(i)
+  print(paste(i, " - Start ALL -", base::date(), sep = ""))
+  
 
   if(experiment == "small"){
     A <- rbind(c(1, 1, 1, 1), c(1, 1, 0, 0), c(0, 0, 1, 1))
@@ -99,6 +106,24 @@ data_test <- makeMatrices(my_bights, list_subsets_test, H = H, fmethod_agg = fme
 Yhat_test_allh  <- data_test$Yhat
 Y_test_allh    <- data_test$Y
 
+if(add.bias){
+  #Evalid <- (Y_valid_allh[1, , ] - Yhat_valid_allh[1, , ] )^2
+  mysignal <- Y_valid_allh[1, , ]
+  mymu <- apply(mysignal, 1, mean) 
+  mysigma <- apply(mysignal, 1, sd)
+  SNR <- mymu/mysigma
+  MYBIAS_valid <- t(sapply(seq(my_bights$nts), function(j){ 
+    rnorm(ncol(mysignal), mean = mymu[j]/3, sd = mysigma[j]/5)
+  }))
+  Yhat_valid_allh[1, , ]  <- Yhat_valid_allh[1, , ]  + MYBIAS_valid
+  MYBIAS_test <- t(sapply(seq(my_bights$nts), function(j){ 
+    rnorm(ncol(mysignal), mean = mymu[j]/3, sd = mysigma[j]/5)
+  }))
+  Yhat_test_allh[1, , ] <- Yhat_test_allh[1, , ] + MYBIAS_test
+  
+  #Etest <-  Y_test_allh[1, , ] - Yhat_test_allh[1, , ]
+}
+  
 #stop("done")
 # b <- my_bights$S %*% pbu(my_bights) %*% Yhat_test_allh[1, , ]
 # e <- Yhat_test_allh[1, , ] - b
