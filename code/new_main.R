@@ -3,11 +3,11 @@ assign("last.warning", NULL, envir = baseenv())
 args = (commandArgs(TRUE))
 if(length(args) == 0){
   
-  experiment <- "large"
+  experiment <- "small"
   idjob <- 220
   nb_simulations <- 500
-  fmethod_agg <- "AR1"
-  fmethod_bot <- "AR1"
+  fmethod_agg <- "ARIMA"
+  fmethod_bot <- "ETS"
   lambda_selection <- "1se"
 }else{
   
@@ -85,19 +85,24 @@ for(i in seq_along(results)){
 # OLD: data_valid <- make.data(my_bights, list_subsets_valid, H = H)
 # OLD: data_test <- make.data(my_bights, list_subsets_test, H = H)
 
-print(paste("Start forecasting in validation -", base::date(), sep = ""))
+#print(paste("Start forecasting in validation -", base::date(), sep = ""))
 ### valid
 list_subsets_valid <- lapply(seq(T_train, T_learn - H), function(i){c(i - T_train + 1, i)})
 data_valid <- makeMatrices(my_bights, list_subsets_valid, H = H, fmethod_agg = fmethod_agg, fmethod_bot = fmethod_bot, refit_step = refit_step)
 Yhat_valid_allh <- data_valid$Yhat
 Y_valid_allh     <- data_valid$Y
 
-print(paste("Start forecasting in testing -", base::date(), sep = ""))
+#print(paste("Start forecasting in testing -", base::date(), sep = ""))
 ### test
 list_subsets_test <- lapply(seq(T_learn, T_all - H), function(i){c(i - T_learn + 1, i)}) # I CHANGED it from T_TRAIN TO T_LEARN !!
 data_test <- makeMatrices(my_bights, list_subsets_test, H = H, fmethod_agg = fmethod_agg, fmethod_bot = fmethod_bot, refit_step = refit_step)
 Yhat_test_allh  <- data_test$Yhat
 Y_test_allh    <- data_test$Y
+
+#stop("done")
+# b <- my_bights$S %*% pbu(my_bights) %*% Yhat_test_allh[1, , ]
+# e <- Yhat_test_allh[1, , ] - b
+# apply(e, 1, mean)
 
 # save this in rdata? + tag ?
 
@@ -158,16 +163,16 @@ for(h in seq(H)){
     #objmethod <- list(algo = "GGLASSO", Ptowards = pbu(my_bights), config = config_gglasso, selection = lambda_selection)
     #objlearn_GGLASSO_towardspbu <- new_learnreg(objreg_valid, my_bights, objmethod)
     
-    print(paste("Start LASSO -", base::date(), sep = ""))
+    #print(paste("Start LASSO -", base::date(), sep = ""))
     # LASSO
     objmethod <- list(algo = "LASSO", Ptowards = NULL, config = config, selection = lambda_selection)
     objlearn_LASSO <- new_learnreg(objreg_valid, my_bights, objmethod)
     
-    print(paste("Start LASSO-PBU -", base::date(), sep = ""))
+    #print(paste("Start LASSO-PBU -", base::date(), sep = ""))
     objmethod <- list(algo = "LASSO", Ptowards = pbu(my_bights), config = config, selection = lambda_selection)
     objlearn_LASSO_towardspbu <- new_learnreg(objreg_valid, my_bights, objmethod)
     
-    print(paste("Start LS -", base::date(), sep = ""))
+    #print(paste("Start LS -", base::date(), sep = ""))
     # OLS
     objmethod <- list(algo = "OLS", Ptowards = NULL, config = config, selection = lambda_selection)
     objlearn_OLS <- new_learnreg(objreg_valid, my_bights, objmethod)
@@ -176,11 +181,11 @@ for(h in seq(H)){
     config_ridge$glmnet$alpha <- 0
     config_ridge$cvglmnet$alpha <- 0 # !!!!!!!
     
-    print(paste("Start RIDGE -", base::date(), sep = ""))
+    #print(paste("Start RIDGE -", base::date(), sep = ""))
     objmethod <- list(algo = "LASSO", Ptowards = NULL, config = config_ridge, selection = lambda_selection)
     objlearn_RIDGE <- new_learnreg(objreg_valid, my_bights, objmethod)
     
-    print(paste("Start RIDGE-PBU -", base::date(), sep = ""))
+    #print(paste("Start RIDGE-PBU -", base::date(), sep = ""))
     objmethod <- list(algo = "LASSO", Ptowards = pbu(my_bights), config = config_ridge, selection = lambda_selection)
     objlearn_RIDGE_towardspbu <- new_learnreg(objreg_valid, my_bights, objmethod)
     
@@ -194,7 +199,7 @@ for(h in seq(H)){
   predictions_RIDGE <- new_predtest(objreg_test, my_bights, objlearn_RIDGE)
   predictions_RIDGE_towardspbu <- new_predtest(objreg_test, my_bights, objlearn_RIDGE_towardspbu)
   
-  print(paste("END PREDICTIONS -", base::date(), sep = ""))
+  #print(paste("END PREDICTIONS -", base::date(), sep = ""))
   
   #predictions_GGLASSO <- 0
   #predictions_GGLASSO_towardspbu <- 0
@@ -262,7 +267,7 @@ for(h in seq(H)){
   Ytilde_test_allh[h, , , 12] <- t(predictions_RIDGE_towardspbu)
   #print(date())
   
-  print(paste("FINISH ALL -", base::date(), sep = ""))
+  #print(paste("FINISH ALL -", base::date(), sep = ""))
 }
 Ytilde_test_allh[, , , 13] <- Yhat_test_allh
 

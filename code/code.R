@@ -33,11 +33,11 @@ rolling.forecast <- function(series, list_subsets, H, fmethod = c("AR1", "ARIMA"
   
   if(fmethod == "ETS"){
     fit_fct <- ets
-    forecast_function <- ets
+    forecast_fct <- ets
+    list_param <- NULL
   }else if(fmethod == "ARIMA"){
     fit_fct <- auto.arima
     forecast_fct <- Arima
-    list_param <- NULL
     list_param <- list(seasonal = FALSE, ic = "aic", max.p = 2, max.q = 2,  approximation = TRUE, stationary = FALSE)
   }else if(fmethod == "AR1"){
     fit_fct <- auto.arima
