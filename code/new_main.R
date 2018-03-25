@@ -144,11 +144,15 @@ if(add.bias){
   rts <- my_bights$nts - my_bights$nbts
   nts <- nbts + rts
   
-  avg_mu_bottom <- mean(mymu[seq(rts + 1, nts)])
-  avg_mu_agg    <- mean(mymu[seq(1, rts)])
-  avg_sd_bottom <- mean(mysigma[seq(rts + 1, nts)])
-  avg_sd_agg    <- mean(mysigma[seq(1, rts)])
+  bias_mu_bottom <- mean(mymu[seq(rts + 1, nts)])
+  bias_mu_agg    <- mean(mymu[seq(1, rts)])
+  bias_sd_bottom <- mean(mysigma[seq(rts + 1, nts)])
+  bias_sd_agg    <- mean(mysigma[seq(1, rts)])
   
+  #bias_mu_bottom <- 2
+  #bias_mu_agg    <-  5
+  #bias_sd_bottom <- 1
+  #bias_sd_agg    <- 2
   
   nvalid <- ncol(Yhat_valid_allh[1, , ])
   
@@ -156,7 +160,9 @@ if(add.bias){
     #rnorm(ncol(mysignal), mean = mymu[j]/3, sd = mysigma[j]/5)
     #rnorm(nvalid, mean = ifelse(j > rts, 3, 8), sd = ifelse(j > rts, 2, 4))
     #rnorm(nvalid, mean = ifelse(j > rts, avg_mu_bottom, avg_mu_agg), sd = ifelse(j > rts, avg_sd_bottom, avg_sd_agg))
-    rnorm(nvalid, mean = ifelse(j > rts, 2, 5), sd = ifelse(j > rts, 1, 2))
+    rnorm(nvalid, 
+          mean = ifelse(j > rts, bias_mu_bottom, bias_mu_agg), 
+          sd = ifelse(j > rts, bias_sd_bottom, bias_sd_agg))
   }))
   Yhat_valid_allh[1, , ]  <- Yhat_valid_allh[1, , ]  + MYBIAS_valid
   
@@ -166,7 +172,9 @@ if(add.bias){
     #rnorm(ncol(mysignal), mean = mymu[j]/3, sd = mysigma[j]/5)
     #rnorm(ntest, mean = ifelse(j > my_bights$nts - my_bights$nbts, 3, 8), sd = ifelse(j > my_bights$nts - my_bights$nbts, 2, 4))
     #rnorm(ntest, mean = ifelse(j > rts, avg_mu_bottom, avg_mu_agg), sd = ifelse(j > rts, avg_sd_bottom, avg_sd_agg))
-    rnorm(ntest, mean = ifelse(j > rts, 2, 5), sd = ifelse(j > rts, 1, 2))
+    rnorm(ntest, 
+          mean = ifelse(j > rts, bias_mu_bottom, bias_mu_agg), 
+          sd = ifelse(j > rts, bias_sd_bottom, bias_sd_agg))
   }))
   Yhat_test_allh[1, , ] <- Yhat_test_allh[1, , ] + MYBIAS_test
   
