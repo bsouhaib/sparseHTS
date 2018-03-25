@@ -2,14 +2,14 @@
 
 rscript="new_main.R"
 
-experiment="small"
+experiment="large"
 #lambdasel="min"
 lambdasel="1se"
 #njobs=5 
 #allidjobs=$(seq 200 210)
-allidjobs=$(seq 400 450)
+allidjobs=$(seq 2000 2060)
 #allidjobs=(200)
-nbsimul=100
+nbsimul=10
 
 #fmethods_agg=("ETS" "ARIMA" "ETS")
 #fmethods_bot=("ARIMA" "ETS" "ETS")

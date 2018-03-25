@@ -201,10 +201,21 @@ config_gglasso <- list(eps = 10^-6, nlambda = 50, intercept = FALSE, maxit = 1e+
 #print(glmnet_config)
 #print(sgl_config)
 
-
+#stop("done")
 # naive predictions
-id <- sapply(list_subsets_test, function(vec){vec[2]})
+id <- sapply(list_subsets_test, function(vec){ vec[2] })
 predictions_naive <- my_bights$yts[id, ]
+
+# id <- sapply(list_subsets_test, function(vec){
+#   v <- vec[2] - list_subsets_test[[1]][2]
+#   if(v %% refit_step == 0){
+#     RES <- vec[2]
+#   }else{
+#     RES <- list_subsets_test[[1]][2] + refit_step * floor(v/refit_step)
+#   }
+#   RES
+#   })
+# predictions_naive <- my_bights$yts[id, ]
 
 # add mean predictions
 

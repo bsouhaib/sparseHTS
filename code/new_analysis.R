@@ -3,7 +3,7 @@ source("nicefigs.R")
 
 tag <- "biasVV"
 
-experiment <- "small"
+experiment <- "large"
 fmethod_agg <- "ARIMA"
 fmethod_bot <- "ARIMA"
 
@@ -21,8 +21,8 @@ color_methods <- c("red", "blue", "cyan", "orange", "purple", "green", "brown", 
 #color_methods <- c("red", "blue", "cyan", "orange", "purple", "green", "brown", "darkgreen", "grey", "black")
 
 
-id_jobs <- 1986 #seq(400, 450) #420 #seq(200, 210) #420 #c(200, 210)
-nb_simulations <- 500
+id_jobs <- seq(2000, 2060) #1986 #seq(400, 450) #420 #seq(200, 210) #420 #c(200, 210)
+nb_simulations <- 100
 ids_simulations <- seq(nb_simulations)
 #ids_simulations <- 37
 
@@ -78,6 +78,7 @@ v_sd <- sqrt(Reduce("+", lapply(v, function(mat){ (mat - v_mean)^2}))/length(v))
 #####
 methods_toprint <- c("BU", "BASE", "MINT", "MINTOLS", "LAS_PBU", "LAS")
 methods_toprint <- c("BU", "BASE", "MINT", "MINTOLS",  "LSglmnet", "RID", "LAS", "RID_PBU","LAS_PBU", "NAIVE")
+methods_toprint <- c("MINT", "MINTOLS",  "LSglmnet", "RID", "LAS", "RID_PBU","LAS_PBU", "NAIVE")
 
 id.keep <- match(methods_toprint, name_methods)
 
