@@ -4,7 +4,7 @@ args = (commandArgs(TRUE))
 if(length(args) == 0){
   
   experiment <- "small"
-  idjob <- 420
+  idjob <- 1986
   nb_simulations <- 500
   fmethod_agg <- "ARIMA"
   fmethod_bot <- "ARIMA"
@@ -106,18 +106,67 @@ data_test <- makeMatrices(my_bights, list_subsets_test, H = H, fmethod_agg = fme
 Yhat_test_allh  <- data_test$Yhat
 Y_test_allh    <- data_test$Y
 
+
+if(FALSE){
+#### TRYING min_p sum_t ||yhat - s p yhat||^2 ###
+  Yhat <- t(Yhat_valid_allh[1, , ])
+  y <- fct_vec(Yhat)
+  X <- kronecker(my_bights$S, Yhat)
+  beta <- solve(t(X) %*% X) %*% t(X) %*% y
+  P_transpose <- fct_inv_vec(beta, nrows = nrow(my_bights$S), ncolumns = ncol(my_bights$S))
+  P <- t(P_transpose)
+  P1 <- P
+}
+if(FALSE)
+{
+  lambda <- 10000000
+  Yhat <- t(Yhat_valid_allh[1, , ])
+  Y    <- t(Y_valid_allh[1, , ])
+  
+  X <- rbind(kronecker(my_bights$S, Yhat), sqrt(lambda) * kronecker(my_bights$S, diag(my_bights$nts)))
+  y <- rbind(fct_vec(Y), sqrt(lambda) * fct_vec(diag(my_bights$nts)))
+
+  beta <- solve(t(X) %*% X) %*% t(X) %*% y
+  P_transpose <- fct_inv_vec(beta, nrows = nrow(my_bights$S), ncolumns = ncol(my_bights$S))
+  P <- t(P_transpose)
+  P_LS <- solve(t(my_bights$S) %*% my_bights$S) %*% t(my_bights$S)
+}
+
 if(add.bias){
+  #stop("done")
   #Evalid <- (Y_valid_allh[1, , ] - Yhat_valid_allh[1, , ] )^2
   mysignal <- Y_valid_allh[1, , ]
   mymu <- apply(mysignal, 1, mean) 
   mysigma <- apply(mysignal, 1, sd)
   SNR <- mymu/mysigma
+  
+  nbts <- my_bights$nbts
+  rts <- my_bights$nts - my_bights$nbts
+  nts <- nbts + rts
+  
+  avg_mu_bottom <- mean(mymu[seq(rts + 1, nts)])
+  avg_mu_agg    <- mean(mymu[seq(1, rts)])
+  avg_sd_bottom <- mean(mysigma[seq(rts + 1, nts)])
+  avg_sd_agg    <- mean(mysigma[seq(1, rts)])
+  
+  
+  nvalid <- ncol(Yhat_valid_allh[1, , ])
+  
   MYBIAS_valid <- t(sapply(seq(my_bights$nts), function(j){ 
-    rnorm(ncol(mysignal), mean = mymu[j]/3, sd = mysigma[j]/5)
+    #rnorm(ncol(mysignal), mean = mymu[j]/3, sd = mysigma[j]/5)
+    #rnorm(nvalid, mean = ifelse(j > rts, 3, 8), sd = ifelse(j > rts, 2, 4))
+    #rnorm(nvalid, mean = ifelse(j > rts, avg_mu_bottom, avg_mu_agg), sd = ifelse(j > rts, avg_sd_bottom, avg_sd_agg))
+    rnorm(nvalid, mean = ifelse(j > rts, 2, 5), sd = ifelse(j > rts, 1, 2))
   }))
   Yhat_valid_allh[1, , ]  <- Yhat_valid_allh[1, , ]  + MYBIAS_valid
+  
+  ntest <- ncol(Yhat_test_allh[1, , ])
+  
   MYBIAS_test <- t(sapply(seq(my_bights$nts), function(j){ 
-    rnorm(ncol(mysignal), mean = mymu[j]/3, sd = mysigma[j]/5)
+    #rnorm(ncol(mysignal), mean = mymu[j]/3, sd = mysigma[j]/5)
+    #rnorm(ntest, mean = ifelse(j > my_bights$nts - my_bights$nbts, 3, 8), sd = ifelse(j > my_bights$nts - my_bights$nbts, 2, 4))
+    #rnorm(ntest, mean = ifelse(j > rts, avg_mu_bottom, avg_mu_agg), sd = ifelse(j > rts, avg_sd_bottom, avg_sd_agg))
+    rnorm(ntest, mean = ifelse(j > rts, 2, 5), sd = ifelse(j > rts, 1, 2))
   }))
   Yhat_test_allh[1, , ] <- Yhat_test_allh[1, , ] + MYBIAS_test
   
@@ -176,6 +225,8 @@ for(h in seq(H)){
   config$cvglmnet$foldid <- foldid
   config$cvglmnet$nfolds <- NA
   config_gglasso$foldid <- foldid
+  
+  #stop("done")
   
  # print(date())
   #stop("done")
