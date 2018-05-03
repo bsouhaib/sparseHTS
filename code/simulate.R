@@ -1,5 +1,5 @@
 
-simulte_hts <- function(n_simul){
+simulate_hts <- function(n_simul){
   p <- 2
   d <- 0
   q <- 1
@@ -13,11 +13,12 @@ simulte_hts <- function(n_simul){
   Sigma <- rbind(c(5, 3, 2, 1), c(3, 4, 2, 1), c(2, 2, 5, 3), c(1, 1, 3, 4))
   Ematrix <- mvrnorm(n = n_simul, mus, Sigma = Sigma)
   
-  
   bts <- NULL
   for(j in seq(4)){
     series <- arima.sim(n = n_simul, list(order = c(p, d, q), ar = PHI, ma = THETA), innov = Ematrix[, j])
     bts <- cbind(bts, series)
   }
+
   bts <- tail(bts, -n_warm)
+  list(bts = bts, param = list(phi_1 = phi_1, phi_2 = phi_2, theta_1 = theta_1))
 }

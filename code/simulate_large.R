@@ -9,7 +9,8 @@ require(Matrix)
 ordergenCor <- function(n.bot)
 {
   
-  order.diff <- sample(0:1, n.bot, replace = TRUE)
+  #order.diff <- sample(0:1, n.bot, replace = TRUE)
+  order.diff <- sample(0, n.bot, replace = TRUE)
   order.ar <- sample(0:2, n.bot, replace = TRUE)
   order.ma <- sample(0:2, n.bot, replace = TRUE)
   order.d <- cbind(order.ar, order.diff, order.ma)
@@ -96,7 +97,8 @@ data.genCor <- function(n, n.bot, var.mat)
 ordergenCom <- function(n.bot)
 {
   
-  order.diff <- rep(1, n.bot)
+  #order.diff <- rep(1, n.bot) # ?????????? why 1 ???
+  order.diff <- rep(0, n.bot)
   order.ar <- sample(0:2, n.bot, replace = TRUE)
   order.ma <- sample(0:2, n.bot, replace = TRUE)
   order.d <- cbind(order.ar, order.diff, order.ma)
@@ -180,7 +182,7 @@ data.genCom <- function(n, n.bot, var)
 ordergenNoise <- function(n.bot)
 {
   
-  order.diff <- rep(0, n.bot)
+  order.diff <- rep(0, n.bot) # ?????
   order.ar <- sample(0:2, n.bot, replace = TRUE)
   order.ma <- sample(0:2, n.bot, replace = TRUE)
   order.d <- cbind(order.ar, order.diff, order.ma)
@@ -265,11 +267,12 @@ data.genNoise <- function(n, n.bot, var.mat)
 }
 
 
-simulte_large_hts <- function(n){
+simulate_large_hts <- function(n){
   
   #nodes <- list(6, rep(4, 6), rep(4, 24), rep(4, 96), rep(4, 384))
-  #nodes <- list(6, rep(4, 6), rep(4, 24), rep(4, 96))
-  nodes <- list(6, rep(4, 6), rep(4, 24))
+  # nodes <- list(6, rep(4, 6), rep(4, 24), rep(4, 96))
+  #nodes <- list(6, rep(4, 6), rep(4, 24))
+  nodes <- list(10, rep(4, 10), rep(4, 40))
   
   gmat <- hts:::GmatrixH(nodes)
   gmat <- apply(gmat, 1, table)

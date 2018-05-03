@@ -48,12 +48,15 @@ new_learnreg <- function(objreg, objhts, objmethod){
 
   algo <- objmethod$algo
   config <- objmethod$config
-  if(algo == "LASSO" || algo == "OLS"){
+  model <- NULL
+  s <- NULL
+  if(algo == "LASSO" || algo == "gOLS"){
     model <- do.call(glmnet, c(list(x = X, y = y), config$glmnet)) 
-    if(algo == "OLS"){
+    if(algo == "gOLS"){
       s <- 0
     }else if(algo == "LASSO"){
       mylambdas <- c(model$lambda, seq(tail(model$lambda, 1), 0,length.out = 10))
+      
       model <- do.call(cv.glmnet, c(list(x = X, y = y), config$cvglmnet , list(lambda = mylambdas)))
       s <- ifelse(objmethod$selection == "min", "lambda.min", "lambda.1se")
       
@@ -74,7 +77,7 @@ new_predtest <- function(objreg, objhts, objlearn = NULL){
   objmethod <- objlearn$objmethod
   algo <- objmethod$algo
   
-  if(algo == "LASSO" || algo == "OLS" || algo == "GGLASSO"){  
+  if(algo == "LASSO" || algo == "gOLS" || algo == "GGLASSO"){  
     Yhat <- objreg$Yhat
     
     scaling_info <- objlearn$scaling_info
@@ -101,121 +104,19 @@ new_predtest <- function(objreg, objhts, objlearn = NULL){
     }else{
       Ytilde_test <- Ytilde_uncentered_test
     }
-  }else if(algo %in% c("BU", "MINT") ){
+  }else if(algo %in% c("BU", "MINT", "OLS") ){
     Ytilde_test <-  objreg$Yhat %*% t(objlearn$P) %*% t(objhts$S)
+  }else if(algo %in% c("OLSS")){
+      Yhat <- objreg$Yhat
+      scaling_info <- objlearn$scaling_info
+      Yhat_scaled <- t((t(Yhat) - scaling_info$mu_Yhat)/scaling_info$sd_Yhat)
+      Ytilde_centered_test <-  Yhat_scaled %*% t(objlearn$P) %*% t(objhts$S)
+      Ytilde_uncentered_test <- t((t(Ytilde_centered_test) + scaling_info$mu_Y))
+      Ytilde_test <- Ytilde_uncentered_test
   }else{
     stop("ERROR IN METHOD'S NAME")
   }
   as.matrix(Ytilde_test)
-}
-
-
-
-
-
-learnreg <- function(objreg, objhts, algo, config = NULL, selection = c("min", "1se"), towards_pbu = FALSE){
-  
-  X <- objreg$X
-  if(towards_pbu){
-    P_BU <- cbind(matrix(0, objhts$nbts, objhts$nts - objhts$nbts), diag(objhts$nbts))
-    y <- objreg$y - X %*% makey(t(P_BU))
-  }else{
-    y <- objreg$y
-  }
-  
-  
-  lambda_final <- NULL
-  s  <- NULL
-  ############
-  if(algo == "glmnet" || algo == "glmnetOLS"){
-    
-    if(algo == "glmnetOLS"){
-      cvfit <- model <- do.call(glmnet, c(list(x = X, y = y), config))
-      s <- 0
-      idmin_lambda <- NULL
-    }else{
-      model <- do.call(glmnet, c(list(x = X, y = y), config[!names(config) %in% c("foldid", "nfolds") ]))
-      mylambdas <- c(model$lambda, seq(tail(model$lambda, 1), 0,length.out = 25))
-      cvfit <- model <- do.call(cv.glmnet, c(list(x = X, y = y), config, list(lambda = mylambdas)))
-      s <- ifelse(selection == "min", "lambda.min", "lambda.1se")
-      idmin_lambda <-  ifelse(selection == "min", match(model$lambda.min, model$lambda), match(model$lambda.1se, model$lambda))
-    }
-    
-    browser()
-    #slm.model <- slm.fit(x = X, y = as.numeric(y) )
-    #X2 <- new("matrix.csr", X2)
-    
-    beta_hat <- as.numeric(coef(cvfit, s = s))
-    if(!config$intercept)
-      beta_hat <- beta_hat[-1]
-    number_zeroes <- length(which(abs(beta_hat) < 10^-16))
-  ############
-  }else if(grepl("SGL", algo)){ 
-    if(algo == "SGLrow"){
-      grouping <- rep(seq(objhts$nts), objhts$nbts)
-    }else if(algo == "SGLcol"){
-      grouping <- rep(seq(objhts$nbts), each = objhts$nts)
-    }
-    
-    data <- list(x = as.matrix(X) , y = y)
-    param_list <- c(list(data = data, index = grouping, type = "linear"), config)
-    cvfit <- do.call(cvSGL, param_list)
-    
-    idmin_lambda <- which.min(cvfit$lldiff)
-    if(selection == "1se"){
-      idmin_lambda <- min(which(cvfit$lldiff <= cvfit$lldiff[idmin_lambda] + cvfit$llSD))
-    }
-    
-    param_list <- param_list[-which(names(param_list) == "nfold")]
-    fit_SGL <- model <- do.call(SGL, param_list)
-    #beta_hat <- fit_SGL$beta[, idmin_lambda]
-    lambda_final <- fit_SGL$lambdas[idmin_lambda]
-  }
-  
-  obj_return <- list(algo = algo, model = model, idmin_lambda = idmin_lambda, s = s, towards_pbu = towards_pbu,
-                     number_zeroes = number_zeroes)
-  
-  if(towards_pbu){
-    c_hat <- beta_hat
-    C <- getP(c_hat, objhts)
-    obj_return <- c(list(C = C), obj_return)
-  }else{
-    P <- getP(beta_hat, objhts)
-    obj_return <- c(list(P = P), obj_return)
-  }
-  
-  return(obj_return) 
-}
-
-
-predtest <- function(objreg, objhts, objlearn = NULL){
-  X_test <- as.matrix(objreg$X)
-  algo <- objlearn$algo
-  
-  if(algo == "glmnet" || algo == "glmnetOLS" || grepl("SGL", algo)){  
-    if(algo == "glmnet" || algo == "glmnetOLS"){
-      vecpred <- as.numeric(predict(objlearn$model, newx = X_test, type = "response", s = objlearn$s))
-    }else if(grepl("SGL", algo)){
-      idmin_lambda <- objlearn$idmin_lambda
-      vecpred <- as.numeric(predictSGL(objlearn$model, X_test, lam = idmin_lambda))
-    }
-    #else{
-    #  vecpred <- X_test %*% t(objlearn$P)
-    #}
-    matpred <- makeY(vecpred, objhts)
-    
-    if(objlearn$towards_pbu){
-      matpred <- matpred + predtest(objreg, objhts, bu(objhts))
-    }
-  }else if(objlearn$algo %in% c("BU", "MINT") ){
-    matpred <-  objreg$Yhat %*% t(objlearn$P) %*% t(objhts$S)
-  }else if(objlearn$algo == "LS"){
-    # INTERCEPT IS INCLUDED HERE
-    matpred <-  objreg$Yhat_intercept %*% t(objlearn$P) %*% t(objhts$S)
-  }else{
-    stop("ERROR IN METHOD'S NAME")
-  }
-  as.matrix(matpred)
 }
 
 
@@ -224,11 +125,28 @@ bu <- function(objhts){
   list(objmethod = list(algo = "BU"), P = P_BU)
 }
 
-mls <- function(objreg, objhts){
+
+ols <- function(objreg, objhts){
   S <- objhts$S
-  #P_LS <- solve(t(S) %*% S) %*% t(S) %*% t(objreg$Y) %*% objreg$Yhat %*% solve(t(objreg$Yhat) %*% objreg$Yhat)
-  P_LS <- solve(t(S) %*% S) %*% t(S) %*% t(objreg$Y) %*% objreg$Yhat_intercept %*% solve(t(objreg$Yhat_intercept) %*% objreg$Yhat_intercept)
-  list(objmethod = list(algo = "LS"), P = P_LS)
+  P_LS <- solve(t(S) %*% S) %*% t(S) %*% t(objreg$Y) %*% objreg$Yhat %*% solve(t(objreg$Yhat) %*% objreg$Yhat)
+  list(objmethod = list(algo = "OLS"), P = P_LS)
+}
+
+olss <- function(objreg, objhts){
+  
+  Y <- objreg$Y
+  mu_Y <- colMeans(Y)
+  Y_centered <- t(t(Y) - mu_Y)
+  
+  Yhat <- objreg$Yhat
+  mu_Yhat <- colMeans(Yhat)
+  Yhat_centered <- t(t(Yhat) - mu_Yhat)
+  sd_Yhat <- apply(Yhat_centered, 2, sd)
+  Yhat_scaled <- t(t(Yhat_centered)/sd_Yhat)
+  
+  S <- objhts$S
+  P_LS <- solve(t(S) %*% S) %*% t(S) %*% t(Y_centered) %*% Yhat_scaled %*% solve(t(Yhat_scaled) %*% Yhat_scaled)
+  list(objmethod = list(algo = "OLSS"), P = P_LS)
 }
 
 mint <- function(objhts, method = NULL, residuals = NULL, h = NULL){
@@ -256,6 +174,13 @@ mint <- function(objhts, method = NULL, residuals = NULL, h = NULL){
     W <- shrink_results$shrink.cov
   }else if(method == "ols"){
     W <- diag(objhts$nts)
+  }else if(method == "sample"){
+    n <- nrow(R1)
+    W <- crossprod(R1) / n
+    if(is.positive.definite(W)==FALSE)
+    {
+      stop("MinT needs covariance matrix to be positive definite.", call. = FALSE)
+    }
   }
  
   MAT1 <- W %*% U

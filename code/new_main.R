@@ -3,9 +3,9 @@ assign("last.warning", NULL, envir = baseenv())
 args = (commandArgs(TRUE))
 if(length(args) == 0){
   
-  experiment <- "small"
-  idjob <- 1986
-  nb_simulations <- 500
+  experiment <- "large-biased"
+  idjob <- 1
+  nb_simulations <- 100
   fmethod_agg <- "ARIMA"
   fmethod_bot <- "ARIMA"
   lambda_selection <- "1se"
@@ -16,8 +16,8 @@ if(length(args) == 0){
   }
   
   experiment <- args[[1]]
-  idjob <- as.integer(args[[2]])
-  nb_simulations <- as.integer(args[[3]])
+  idjob <- as.numeric(args[[2]])
+  nb_simulations <- as.numeric(args[[3]])
   fmethod_agg <- args[[4]]
   fmethod_bot <- args[[5]]
   lambda_selection <- args[[6]]
@@ -26,14 +26,16 @@ if(length(args) == 0){
 #set.seed(6120)
 set.seed(idjob)
 
+#print(experiment)
 #print(idjob)
-#print(lambda_selection)
-#print(towards_pbu)
 #print(nb_simulations)
+#print(fmethod_agg)
+#print(fmethod_bot)
+#print(lambda_selection)
 
 stopifnot(lambda_selection %in% c("min", "1se"))
 
-
+source("config_paths.R")
 source("packages.R")
 source("bights.R")
 source("methods.R")
@@ -42,23 +44,26 @@ source("simulate_large.R")
 source("utils.R")
 source("hts.R")
 source("code.R")
+library(methods)
 
-add.bias <- TRUE
-if(add.bias)
-{
-  print("CAREFUL !!!!!! BIAS IS ADDED !!!!!")
-}
+name_methods <- c("BU", "MINTOLS", "MINTSAM", "MINTSHR", "NAIVE", "AVG", 
+                  "OLS", "OLSS", "gOLS",  "L1", "L2",  "L1-PBU", "L2-PBU", "SGLR", "SGLC", "GGLAS", "GGLAS_PBU", 
+                  "BASE","BASE2", "OPT")
+nb_methods <- length(name_methods)
 
-nb_methods <- 13
+res_experiment <- unlist(strsplit(experiment, "-"))
+stopifnot(res_experiment[2] %in% c("biased", "unbiased"))
+DGP <- res_experiment[1]
+add.bias <- (res_experiment[2] == "biased")
 
-sameP_allhorizons <- TRUE
+mc.cores <- 1
+do.save <- TRUE
 refit_step <- 40
-
-T_train <- 300  
-T_valid <- 200
-#T_valid <- 300
+sameP_allhorizons <- TRUE
+T_learn <- 600
+T_train <- floor((2 * T_learn)/3)
+T_valid <- T_learn - T_train
 T_test <- 200
-T_learn <- T_train + T_valid
 T_all <- T_train + T_valid + T_test
 n_warm <- 300
 n_simul <- n_warm + T_all
@@ -66,7 +71,6 @@ n_simul <- n_warm + T_all
 
 #M <- 8 * 15
 #results <- mclapply(seq(M), function(iteration){
-
 #results <- sapply(seq(M), function(iteration){
 
 results <- vector("list", nb_simulations)
@@ -76,122 +80,113 @@ for(i in seq_along(results)){
   print(paste(i, " - Start ALL -", base::date(), sep = ""))
   
 
-  if(experiment == "small"){
+  if(DGP == "small"){
     A <- rbind(c(1, 1, 1, 1), c(1, 1, 0, 0), c(0, 0, 1, 1))
-    bts <- simulte_hts(n_simul)
-  }else  if(experiment == "large"){
-    res <- simulte_large_hts(n_simul)
+    obj_simul <- simulate_hts(n_simul)
+    bts <- obj_simul$bts
+  }else  if(DGP == "large"){
+    res <- simulate_large_hts(n_simul)
     A <- res$A
     btsWithWarm <- res$bts
     bts <- tail(btsWithWarm, -n_warm)
+  }else  if(DGP == "medium"){
+    
+    ngroups <- 20
+    allbts <- vector("list", ngroups)
+    for(igroup in seq(ngroups)){
+      # save parameters in a list
+      allbts[[igroup]] <- simulate_hts(n_simul)$bts
+    }
+    
+    bts <- do.call(cbind, allbts)
+    nbts <- ncol(bts)
+    
+    my_aggregation <- c(1, 4, 20)
+    Alist <- lapply(my_aggregation, function(igroup){
+      Stemp <- diag(igroup)
+      res <- t(sapply(seq(nrow(Stemp)), function(i){
+        rep(Stemp[i, ], each = nbts/igroup)
+      }))
+      res
+    })
+    A <- do.call(rbind, Alist)
+    #A <- rbind(c(1, 1, 1, 1), c(1, 1, 0, 0), c(0, 0, 1, 1))
+  }else{
+    stop("error in DGP !")
   }
   
   my_bights <- bights(bts, A)
-  H <- 2
+  H <- 1
+  print(paste(" m = ", my_bights$nbts, " - n = ", my_bights$nts, sep = ""))
+  print(paste("Tvalid = ", T_valid, sep = ""))
+  print(paste("N = ", my_bights$nts * T_valid, " - p = ", my_bights$nbts * my_bights$nts, sep = ""))
 
-# OLD: data_valid <- make.data(my_bights, list_subsets_valid, H = H)
-# OLD: data_test <- make.data(my_bights, list_subsets_test, H = H)
-
-#print(paste("Start forecasting in validation -", base::date(), sep = ""))
-### valid
-list_subsets_valid <- lapply(seq(T_train, T_learn - H), function(i){c(i - T_train + 1, i)})
-data_valid <- makeMatrices(my_bights, list_subsets_valid, H = H, fmethod_agg = fmethod_agg, fmethod_bot = fmethod_bot, refit_step = refit_step)
-Yhat_valid_allh <- data_valid$Yhat
-Y_valid_allh     <- data_valid$Y
-
-#print(paste("Start forecasting in testing -", base::date(), sep = ""))
-### test
-list_subsets_test <- lapply(seq(T_learn, T_all - H), function(i){c(i - T_learn + 1, i)}) # I CHANGED it from T_TRAIN TO T_LEARN !!
-data_test <- makeMatrices(my_bights, list_subsets_test, H = H, fmethod_agg = fmethod_agg, fmethod_bot = fmethod_bot, refit_step = refit_step)
-Yhat_test_allh  <- data_test$Yhat
-Y_test_allh    <- data_test$Y
-
-
-if(FALSE){
-#### TRYING min_p sum_t ||yhat - s p yhat||^2 ###
-  Yhat <- t(Yhat_valid_allh[1, , ])
-  y <- fct_vec(Yhat)
-  X <- kronecker(my_bights$S, Yhat)
-  beta <- solve(t(X) %*% X) %*% t(X) %*% y
-  P_transpose <- fct_inv_vec(beta, nrows = nrow(my_bights$S), ncolumns = ncol(my_bights$S))
-  P <- t(P_transpose)
-  P1 <- P
-}
-if(FALSE)
-{
-  lambda <- 10000000
-  Yhat <- t(Yhat_valid_allh[1, , ])
-  Y    <- t(Y_valid_allh[1, , ])
+  file_bf <- file.path(rdata.folder, 
+              paste("bf_", experiment, "_", fmethod_agg, "_", 
+              fmethod_bot, "_", idjob, ".", i, "_", refit_step, ".Rdata", sep = ""))  
   
-  X <- rbind(kronecker(my_bights$S, Yhat), sqrt(lambda) * kronecker(my_bights$S, diag(my_bights$nts)))
-  y <- rbind(fct_vec(Y), sqrt(lambda) * fct_vec(diag(my_bights$nts)))
+  if(do.save && file.exists(file_bf)){
+    load(file_bf)
+  }else{
+    ### valid
+    list_subsets_valid <- lapply(seq(T_train, T_learn - H), function(i){c(i - T_train + 1, i)})
+    data_valid <- makeMatrices(my_bights, list_subsets_valid, H = H, 
+                               fmethod_agg = fmethod_agg, fmethod_bot = fmethod_bot, refit_step = refit_step, mc.cores = mc.cores)
+    Yhat_valid_allh <- data_valid$Yhat
+    Y_valid_allh     <- data_valid$Y
+    
+    ### test
+    list_subsets_test <- lapply(seq(T_learn, T_all - H), function(i){c(i - T_learn + 1, i)}) # I CHANGED it from T_TRAIN TO T_LEARN !!
+    data_test <- makeMatrices(my_bights, list_subsets_test, H = H, 
+                              fmethod_agg = fmethod_agg, fmethod_bot = fmethod_bot, refit_step = refit_step, mc.cores = mc.cores)
+    Yhat_test_allh  <- data_test$Yhat
+    Y_test_allh    <- data_test$Y
+    
+    if(do.save){
+      save(file = file_bf, list = c("data_valid", "Yhat_valid_allh", 
+                                  "Y_valid_allh", "data_test", "Yhat_test_allh", "Y_test_allh"))
+    }
+  }
 
-  beta <- solve(t(X) %*% X) %*% t(X) %*% y
-  P_transpose <- fct_inv_vec(beta, nrows = nrow(my_bights$S), ncolumns = ncol(my_bights$S))
-  P <- t(P_transpose)
-  P_LS <- solve(t(my_bights$S) %*% my_bights$S) %*% t(my_bights$S)
-}
+save_Yhat_test_allh <- Yhat_test_allh
 
 if(add.bias){
-  #stop("done")
-  #Evalid <- (Y_valid_allh[1, , ] - Yhat_valid_allh[1, , ] )^2
-  mysignal <- Y_valid_allh[1, , ]
-  mymu <- apply(mysignal, 1, mean) 
-  mysigma <- apply(mysignal, 1, sd)
-  SNR <- mymu/mysigma
+  #hat_all <- Y_valid_allh[1, , ]
+  #PBU <- pbu(my_bights)
+  #hat_bottom <- PBU %*% hat_all
+  #mu_hat_bottom <- apply(hat_bottom, 1, mean) 
+  #sd_hat_bottom <- apply(hat_bottom, 1, sd)
   
+  #bias_mu_bottom <- rep(2, nbts); bias_sd_bottom <- rep(1, nbts)
+  #bias_mu_bottom <- mu_hat_bottom/2; bias_sd_bottom <- sd_hat_bottom/2
   nbts <- my_bights$nbts
-  rts <- my_bights$nts - my_bights$nbts
-  nts <- nbts + rts
+  if(DGP == "small"){
+    bias_mu_bottom <- rep(1, nbts); bias_sd_bottom <- rep(1, nbts)
+  }else if(DGP == "large"){
+    # bias_mu_bottom <- rep(1, nbts); bias_sd_bottom <- rep(1, nbts) # error at 100
+    # bias_mu_bottom <- rep(0.1, nbts); bias_sd_bottom <- rep(0.25, nbts) # error at 6
+    # bias_mu_bottom <- rep(0.1, nbts); bias_sd_bottom <- rep(0.25, nbts) # error at 1.5
+    # bias_mu_bottom <- rep(0.1, nbts); bias_sd_bottom <- rep(0.05, nbts) # error at 1
+    bias_mu_bottom <- rep(0.05, nbts); bias_sd_bottom <- rep(0.05, nbts) # error at ?
+  }
   
-  bias_mu_bottom <- mean(mymu[seq(rts + 1, nts)])
-  bias_mu_agg    <- mean(mymu[seq(1, rts)])
-  bias_sd_bottom <- mean(mysigma[seq(rts + 1, nts)])
-  bias_sd_agg    <- mean(mysigma[seq(1, rts)])
-  
-  #bias_mu_bottom <- 2
-  #bias_mu_agg    <-  5
-  #bias_sd_bottom <- 1
-  #bias_sd_agg    <- 2
-  
+  bias_mu_agg <- A %*% bias_mu_bottom
+  bias_sd_agg <- A %*% bias_sd_bottom
+  bias_mu <- c(bias_mu_agg, bias_mu_bottom)
+  bias_sd <- c(bias_sd_agg, bias_sd_bottom)
+
   nvalid <- ncol(Yhat_valid_allh[1, , ])
-  
   MYBIAS_valid <- t(sapply(seq(my_bights$nts), function(j){ 
-    #rnorm(ncol(mysignal), mean = mymu[j]/3, sd = mysigma[j]/5)
-    #rnorm(nvalid, mean = ifelse(j > rts, 3, 8), sd = ifelse(j > rts, 2, 4))
-    #rnorm(nvalid, mean = ifelse(j > rts, avg_mu_bottom, avg_mu_agg), sd = ifelse(j > rts, avg_sd_bottom, avg_sd_agg))
-    rnorm(nvalid, 
-          mean = ifelse(j > rts, bias_mu_bottom, bias_mu_agg), 
-          sd = ifelse(j > rts, bias_sd_bottom, bias_sd_agg))
+    rnorm(nvalid, mean = bias_mu[j], sd = bias_sd[j])
   }))
   Yhat_valid_allh[1, , ]  <- Yhat_valid_allh[1, , ]  + MYBIAS_valid
   
   ntest <- ncol(Yhat_test_allh[1, , ])
-  
   MYBIAS_test <- t(sapply(seq(my_bights$nts), function(j){ 
-    #rnorm(ncol(mysignal), mean = mymu[j]/3, sd = mysigma[j]/5)
-    #rnorm(ntest, mean = ifelse(j > my_bights$nts - my_bights$nbts, 3, 8), sd = ifelse(j > my_bights$nts - my_bights$nbts, 2, 4))
-    #rnorm(ntest, mean = ifelse(j > rts, avg_mu_bottom, avg_mu_agg), sd = ifelse(j > rts, avg_sd_bottom, avg_sd_agg))
-    rnorm(ntest, 
-          mean = ifelse(j > rts, bias_mu_bottom, bias_mu_agg), 
-          sd = ifelse(j > rts, bias_sd_bottom, bias_sd_agg))
+    rnorm(ntest, mean = bias_mu[j], sd = bias_sd[j])
   }))
-  Yhat_test_allh[1, , ] <- Yhat_test_allh[1, , ] + MYBIAS_test
-  
-  #Etest <-  Y_test_allh[1, , ] - Yhat_test_allh[1, , ]
+  Yhat_test_allh[1, , ] <- Yhat_test_allh[1, , ] + MYBIAS_test  
 }
-  
-#stop("done")
-# b <- my_bights$S %*% pbu(my_bights) %*% Yhat_test_allh[1, , ]
-# e <- Yhat_test_allh[1, , ] - b
-# apply(e, 1, mean)
-
-# save this in rdata? + tag ?
-
-#glmnet_config <- list(intercept = TRUE, standardize = TRUE, alpha = .98, nfolds = 3, thresh = 10^-5)
-#config <- list(intercept = FALSE, standardize = FALSE)
-#glmnet_config <- c(config, list(alpha = .98, nfolds = 3))
-#glmnet_configOLS <- config
 
 config_basic <- list(intercept = FALSE, standardize = FALSE, alpha = .98, thresh = 10^-6, nlambda = 50)
 config <- list(glmnet = config_basic, cvglmnet = c(config_basic, list(nfolds = 3)))
@@ -201,24 +196,13 @@ config_gglasso <- list(eps = 10^-6, nlambda = 50, intercept = FALSE, maxit = 1e+
 #print(glmnet_config)
 #print(sgl_config)
 
-#stop("done")
 # naive predictions
 id <- sapply(list_subsets_test, function(vec){ vec[2] })
 predictions_naive <- my_bights$yts[id, ]
 
-# id <- sapply(list_subsets_test, function(vec){
-#   v <- vec[2] - list_subsets_test[[1]][2]
-#   if(v %% refit_step == 0){
-#     RES <- vec[2]
-#   }else{
-#     RES <- list_subsets_test[[1]][2] + refit_step * floor(v/refit_step)
-#   }
-#   RES
-#   })
-# predictions_naive <- my_bights$yts[id, ]
-
-# add mean predictions
-
+predictions_avg <- t(sapply(list_subsets_test, function(vec){ 
+         apply(my_bights$yts[vec[1]:vec[2], ], 2, mean)
+}))
 
 Ytilde_test_allh <- array(NA, c(dim(Yhat_test_allh), nb_methods) )
 
@@ -235,8 +219,6 @@ for(h in seq(H)){
   objreg_test <- list(X = makeX(Yhat_test_h, my_bights), Yhat = Yhat_test_h,
                       Yhat_intercept = cbind(Yhat_test_h, rep(1, nrow(Yhat_test_h)) ) )
   
-  #print(date())
-  
   nValid <- nrow(Yhat_valid_h)
   foldid <- rep(sample(seq(config$cvglmnet$nfolds), nValid, replace = T), my_bights$nts)
   #glmnet_config_local <- c(glmnet_config, list(foldid = foldid))
@@ -244,11 +226,7 @@ for(h in seq(H)){
   config$cvglmnet$foldid <- foldid
   config$cvglmnet$nfolds <- NA
   config_gglasso$foldid <- foldid
-  
-  #stop("done")
-  
- # print(date())
-  #stop("done")
+
   ##
   if(!sameP_allhorizons || (sameP_allhorizons && h == 1) ){
     
@@ -269,8 +247,8 @@ for(h in seq(H)){
     
     #print(paste("Start LS -", base::date(), sep = ""))
     # OLS
-    objmethod <- list(algo = "OLS", Ptowards = NULL, config = config, selection = lambda_selection)
-    objlearn_OLS <- new_learnreg(objreg_valid, my_bights, objmethod)
+    #objmethod <- list(algo = "gOLS", Ptowards = NULL, config = config, selection = lambda_selection)
+    #objlearn_gOLS <- new_learnreg(objreg_valid, my_bights, objmethod)
     
     config_ridge <- config
     config_ridge$glmnet$alpha <- 0
@@ -283,14 +261,11 @@ for(h in seq(H)){
     #print(paste("Start RIDGE-PBU -", base::date(), sep = ""))
     objmethod <- list(algo = "LASSO", Ptowards = pbu(my_bights), config = config_ridge, selection = lambda_selection)
     objlearn_RIDGE_towardspbu <- new_learnreg(objreg_valid, my_bights, objmethod)
-    
-    
-  
   }
   
   predictions_LASSO <- new_predtest(objreg_test, my_bights, objlearn_LASSO)
   predictions_LASSO_towardspbu <- new_predtest(objreg_test, my_bights, objlearn_LASSO_towardspbu)
-  predictions_OLS <- new_predtest(objreg_test, my_bights, objlearn_OLS)
+  #predictions_gOLS <- new_predtest(objreg_test, my_bights, objlearn_gOLS)
   predictions_RIDGE <- new_predtest(objreg_test, my_bights, objlearn_RIDGE)
   predictions_RIDGE_towardspbu <- new_predtest(objreg_test, my_bights, objlearn_RIDGE_towardspbu)
   
@@ -298,7 +273,7 @@ for(h in seq(H)){
   
   #predictions_GGLASSO <- 0
   #predictions_GGLASSO_towardspbu <- 0
-  #if(experiment == "small"){
+  #if(DGP == "small"){
   #  predictions_GGLASSO <- new_predtest(objreg_test, my_bights, objlearn_GGLASSO)
   #  predictions_GGLASSO_towardspbu <- new_predtest(objreg_test, my_bights, objlearn_GGLASSO_towardspbu)
   #}
@@ -325,60 +300,77 @@ for(h in seq(H)){
   
   #print(date())
   
-  # MINT
+  if(DGP == "large"){
+    predictions_mintsample <- NA
+  }else{
+    # MINTsample
+    obj_mintsample <- mint(my_bights, method = "sample", residuals = residuals, h = h) # J U and W
+    predictions_mintsample <- new_predtest(objreg_test, my_bights, obj_mintsample)
+    #print(date())
+  }
+  
+  # MINTshrink
   residuals <- Y_valid_allh - Yhat_valid_allh
-  obj_mint <- mint(my_bights, method = "shrink", residuals = residuals, h = h) # J U and W
-  predictions_mint <- new_predtest(objreg_test, my_bights, obj_mint)
+  obj_mintshrink <- mint(my_bights, method = "shrink", residuals = residuals, h = h) # J U and W
+  predictions_mintshrink <- new_predtest(objreg_test, my_bights, obj_mintshrink)
   
-  #print(date())
-  
+  # MINTols
   obj_mintols <- mint(my_bights, method = "ols", h = h) # J U and W
   predictions_mintols <- new_predtest(objreg_test, my_bights, obj_mintols)
   
-  #print(date())
+  if(DGP == "large"){
+    predictions_ols <- NA
+  }else{
+    # OLS
+    obj_ols <- ols(objreg_valid, my_bights) 
+    predictions_ols <- new_predtest(objreg_test, my_bights, obj_ols)
+  }
   
-  #if(i == 37)
-  #  stop("STOP HERE")
-  
-  # LS
-  #obj_ls <- mls(objreg_valid, my_bights) 
-  #predictions_ls <- predtest(objreg_test, my_bights, obj_ls)
+  # OLSS
+  #objmethod <- list(algo = "OLSS", Ptowards = NULL, config = NULL, selection = NULL)
+  #objlearn_olss <- new_learnreg(objreg_valid, my_bights, objmethod)
+  #objlearn_olss_bis <- ols(objreg_valid, my_bights) 
+  #objlearn_olss <- c(objlearn_olss, objlearn_olss_bis)
+  #predictions_olss<- new_predtest(objreg_test, my_bights, objlearn_olss)
 
-  Ytilde_test_allh[h, , , 1] <- t(predictions_LASSO)
-  Ytilde_test_allh[h, , , 2] <- t(predictions_LASSO_towardspbu)
-  Ytilde_test_allh[h, , , 3] <- t(predictions_RIDGE)
+  Ytilde_test_allh[h, , , 1] <- t(predictions_bu) 
   
-  #Ytilde_test_allh[h, , , 2] <- t(predictions_sglrow)
-  #Ytilde_test_allh[h, , , 3] <- t(predictions_sglcol)
-  Ytilde_test_allh[h, , , 4] <- t(predictions_bu)
-  Ytilde_test_allh[h, , , 5] <- t(predictions_mint)
-  #Ytilde_test_allh[h, , , 6] <- t(predictions_ls)
-  Ytilde_test_allh[h, , , 7] <- t(predictions_naive)
-  Ytilde_test_allh[h, , , 8] <- t(predictions_OLS)
-  Ytilde_test_allh[h, , , 9] <- t(predictions_mintols)
+  Ytilde_test_allh[h, , , 2] <- t(predictions_mintols)
+  Ytilde_test_allh[h, , , 3] <- t(predictions_mintsample)
+  Ytilde_test_allh[h, , , 4] <- t(predictions_mintshrink)
+  Ytilde_test_allh[h, , , 5] <- t(predictions_naive)
+  Ytilde_test_allh[h, , , 6] <- t(predictions_avg)
   
-  #Ytilde_test_allh[h, , , 10] <- t(predictions_GGLASSO)
-  #Ytilde_test_allh[h, , , 11] <- t(predictions_GGLASSO_towardspbu)
-  Ytilde_test_allh[h, , , 12] <- t(predictions_RIDGE_towardspbu)
-  #print(date())
+  Ytilde_test_allh[h, , , 7] <- t(predictions_ols)
+  #Ytilde_test_allh[h, , , 8] <- t(predictions_olss)
+  #Ytilde_test_allh[h, , , 9]  <- t(predictions_gOLS)
   
-  #print(paste("FINISH ALL -", base::date(), sep = ""))
+  Ytilde_test_allh[h, , , 10] <- t(predictions_LASSO)
+  Ytilde_test_allh[h, , , 11] <- t(predictions_RIDGE)
+  
+  Ytilde_test_allh[h, , , 12]  <- t(predictions_LASSO_towardspbu)
+  Ytilde_test_allh[h, , , 13]  <- t(predictions_RIDGE_towardspbu)
+  
+  #Ytilde_test_allh[h, , , 14]   <- t(predictions_sglrow)
+  #Ytilde_test_allh[h, , , 15]   <- t(predictions_sglcol)
+  #Ytilde_test_allh[h, , , 16]   <- t(predictions_GGLASSO)
+  #Ytilde_test_allh[h, , , 17]   <- t(predictions_GGLASSO_towardspbu)
 }
-Ytilde_test_allh[, , , 13] <- Yhat_test_allh
+Ytilde_test_allh[, , , 18] <- Yhat_test_allh
+Ytilde_test_allh[, , , 19] <- save_Yhat_test_allh
+#Ytilde_test_allh[, , , 20] <- t(predictions_optimal)
+dimnames(Ytilde_test_allh)[[4]] <- name_methods
 
-
-
-#results[[i]] <- list(Ytilde_test_allh = Ytilde_test_allh, Y_test_allh = Y_test_allh)
-myfile <- file.path(getwd(), "../work", paste("results_", experiment, "_", fmethod_agg, "_", fmethod_bot, "_", idjob, ".", i, "_", lambda_selection, ".Rdata", sep = ""))
-save(file = myfile, list = c("Ytilde_test_allh", "Y_test_allh"))
+  #results[[i]] <- list(Ytilde_test_allh = Ytilde_test_allh, Y_test_allh = Y_test_allh)
+  myfile <- file.path(rdata.folder, paste("results_", experiment, "_", 
+                                          fmethod_agg, "_", fmethod_bot, "_", idjob, ".", i, "_", lambda_selection, ".Rdata", sep = ""))
+  save(file = myfile, list = c("Ytilde_test_allh", "Y_test_allh"))
 }
 
 #print(as.numeric(nbzeroes))
-
 #}, simplify = "array")
 #}, mc.cores = 8)
 #stop("done")
-
 #myfile <- file.path(getwd(), "../work", paste("results_", idjob, "_", towards_pbu, "_", lambda_selection, ".Rdata", sep = ""))
 #save(file = myfile, list = c("results"))
 

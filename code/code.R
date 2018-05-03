@@ -1,20 +1,19 @@
 
-makeMatrices <- function(obj_bights, list_subsets, H, fmethod_agg, fmethod_bot, refit_step){
+makeMatrices <- function(obj_bights, list_subsets, H, fmethod_agg, fmethod_bot, refit_step, mc.cores = 1){
   n <- obj_bights$nts
   m <- obj_bights$nbts
   results <- vector("list", n)
   
-  for(j in seq(1, n-m)){
-    #print(j)
-    series <- obj_bights$yts[, j]
-    results[[j]] <- rolling.forecast(series, list_subsets, H, fmethod_agg, refit_step = refit_step)
-  }
-  for(j in seq(n-m+1, n)){
-    #print(j)
-    series <- obj_bights$yts[, j]
-    results[[j]] <- rolling.forecast(series, list_subsets, H, fmethod_bot, refit_step = refit_step)
-  }
-  
+  algos <- c(rep(fmethod_agg, n-m), rep(fmethod_agg, m))
+  #for(j in seq(n)){
+  #  results[[j]] <- rolling.forecast(obj_bights$yts[, j], list_subsets, H, algos[j], refit_step = refit_step)
+  #}
+  #results <- lapply(seq(n), function(j){
+  #  rolling.forecast(obj_bights$yts[, j], list_subsets, H, algos[j], refit_step = refit_step)
+  #})
+  results <- mclapply(seq(n), function(j){
+    rolling.forecast(obj_bights$yts[, j], list_subsets, H, algos[j], refit_step = refit_step)
+  }, mc.cores = mc.cores)
   
   Yhat <- simplify2array(lapply(results, "[[", "predictions"))
   Y <- simplify2array(lapply(results, "[[", "future"))

@@ -23,13 +23,13 @@ bights <- function(bts, A) {
   S <- methods::as(S, "sparseMatrix")
   
   yts <- matrix(NA, nrow = nrow(bts), ncol = nts)
-    
+  
   if (nbts <= 1L) {
     stop("Argument bts must be a multivariate time series.", call. = FALSE)
   }
   
   yts[, seq(naggts)] <-  as.matrix(t(A %*% t(bts)))
-  yts[, seq(naggts + 1, nts)] <- bts
+  yts[, seq(naggts + 1, nts)] <- as.matrix(bts)
   
   output <- structure(
     list(yts = yts, A = A, S = S, nbts = nbts, naggts = naggts, nts = nts, Tobs = Tobs),
