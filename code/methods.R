@@ -56,11 +56,18 @@ new_learnreg <- function(objreg, objhts, objmethod){
       s <- 0
     }else if(algo == "LASSO"){
       mylambdas <- c(model$lambda, seq(tail(model$lambda, 1), 0,length.out = 10))
-      
-      model <- do.call(cv.glmnet, c(list(x = X, y = y), config$cvglmnet , list(lambda = mylambdas)))
+     
+      do.parallel <- FALSE
+      if(nb.cores.cv > 1){
+        do.parallel <- TRUE
+        registerDoMC(cores = nb.cores.cv)
+      }
+      model <- do.call(cv.glmnet, 
+                       c(list(x = X, y = y), 
+                         config$cvglmnet , 
+                         list(lambda = mylambdas), 
+                         list(parallel = do.parallel)))
       s <- ifelse(objmethod$selection == "min", "lambda.min", "lambda.1se")
-      
-      # SHOULD WE use the weight argument of glmnet?????
     }
   }else if(algo == "GGLASSO"){
     group1 <- rep(seq(objhts$nts), objhts$nbts)
@@ -84,7 +91,7 @@ new_predtest <- function(objreg, objhts, objlearn = NULL){
     Yhat_scaled <- t((t(Yhat) - scaling_info$mu_Yhat)/scaling_info$sd_Yhat)
     
     X_test <- makeX(Yhat_scaled, my_bights)
-    X_test <- as.matrix(X_test) # why not keep it sparese?
+    #X_test <- as.matrix(X_test) # why not keep it sparese?
     
     ##
     if(algo == "GGLASSO"){
@@ -94,16 +101,17 @@ new_predtest <- function(objreg, objhts, objlearn = NULL){
     }
     
     #Ytilde_centered_test <- makeY(vec_ytile_test, objhts)  # USE fct_inv_vec
-    Ytilde_centered_test <- fct_inv_vec(vec_ytile_test, nrows = nrow(Yhat_scaled), ncolumns = ncol(Yhat_scaled)) 
-    
+    Ytilde_centered_test <- fct_inv_vec(vec_ytile_test, 
+                                        nrows = nrow(Yhat_scaled), ncolumns = ncol(Yhat_scaled)) 
+
     Ytilde_uncentered_test <- t((t(Ytilde_centered_test) + scaling_info$mu_Y))
-    
     if(!is.null(objmethod$Ptowards)){
       Ytilde_test <- Ytilde_uncentered_test + 
         new_predtest(objreg, objhts, list(objmethod = list(algo = "BU"), P = objmethod$Ptowards))
     }else{
       Ytilde_test <- Ytilde_uncentered_test
     }
+
   }else if(algo %in% c("BU", "MINT", "OLS") ){
     Ytilde_test <-  objreg$Yhat %*% t(objlearn$P) %*% t(objhts$S)
   }else if(algo %in% c("OLSS")){
@@ -116,6 +124,7 @@ new_predtest <- function(objreg, objhts, objlearn = NULL){
   }else{
     stop("ERROR IN METHOD'S NAME")
   }
+  
   as.matrix(Ytilde_test)
 }
 
@@ -149,7 +158,7 @@ olss <- function(objreg, objhts){
   list(objmethod = list(algo = "OLSS"), P = P_LS)
 }
 
-mint <- function(objhts, method = NULL, residuals = NULL, h = NULL){
+mint <- function(objhts, method = NULL, e_residuals = NULL, h = NULL){
   J <- Matrix(cbind(matrix(0, nrow = objhts$nbts, ncol = objhts$nts - objhts$nbts), diag(objhts$nbts)), sparse = TRUE)
   U <- Matrix(rbind(diag(objhts$nts - objhts$nbts), -t(objhts$A)), sparse = TRUE)
   P_BU <- cbind(matrix(0, objhts$nbts, objhts$nts - objhts$nbts), diag(objhts$nbts)) 
@@ -158,8 +167,8 @@ mint <- function(objhts, method = NULL, residuals = NULL, h = NULL){
     h <- 1  
   }
   
-  if(!is.null(residuals))
-  R1 <- t(residuals[h, , ])
+  if(!is.null(e_residuals))
+  R1 <- e_residuals
   
   if(is.null(method))
     method <- "diagonal"

@@ -17,11 +17,12 @@ makeMatrices <- function(obj_bights, list_subsets, H, fmethod_agg, fmethod_bot, 
   
   Yhat <- simplify2array(lapply(results, "[[", "predictions"))
   Y <- simplify2array(lapply(results, "[[", "future"))
+  Eresiduals <- simplify2array(lapply(results, "[[", "e_residuals"))
   
   Yhat <- aperm(Yhat, c(2, 3, 1))
   Y    <- aperm(Y, c(2, 3, 1))
 
-  list(Yhat = Yhat, Y = Y)
+  list(Yhat = Yhat, Y = Y, Eresiduals = Eresiduals)
 }  
 
 
@@ -29,7 +30,8 @@ rolling.forecast <- function(series, list_subsets, H, fmethod = c("AR1", "ARIMA"
 
   n_subsets <- length(list_subsets)
   predictions <- future <- matrix(NA, nrow = n_subsets, ncol = H)  
-  
+  e_residuals <- NULL
+    
   if(fmethod == "ETS"){
     fit_fct <- ets
     forecast_fct <- ets
@@ -55,11 +57,16 @@ rolling.forecast <- function(series, list_subsets, H, fmethod = c("AR1", "ARIMA"
       model <- forecast_fct(learn_series, model = model, use.initial.values = TRUE)
     }
     
+    if(i == 1){
+      e_residuals <- as.numeric(resid(model))
+    }
+    
+    
     predictions[i, ] <- forecast(model, h = H)$mean
     future[i, ] <- series[ts_split[2] + seq(1, H)]
   }
   
-  output <- list(future = future, predictions = predictions)
+  output <- list(future = future, predictions = predictions, e_residuals = e_residuals)
 }
 
 #fit_fct <- function(series, fmethod = c("ARIMA", "ETS")){

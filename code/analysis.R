@@ -1,109 +1,107 @@
 rm(list = ls())
+source("config_paths.R")
+source("nicefigs.R")
 
-nb_methods <- 10
-#name_methods <- c("LASSO", "SGLROW", "SGLCOL", "BU", "MINT", "LS", "NAIVE", "LSglmnet", "MINTOLS", "BASE")
-#color_methods <- c("red", "blue", "blue", "orange", "purple", "green", "brown", "darkgreen", "grey", "black")
+#######
+color_methods <- c("orange", "yellowgreen", "purple", "deeppink", "pink", "yellow",
+                   "darkseagreen1", "darkblue", "darkgreen", "red", "cyan", "blue", "aquamarine", "darkseagreen1", "darkseagreen1", "darkseagreen1", "darkseagreen1", 
+                   "slategray4", "slategray", "aquamarine")
+nb_methods <- length(color_methods)
+#######
 
-name_methods <- c("LASSO", "LASSO_TO_PBU", "SGLCOL", "BU", "MINT", "LS", "NAIVE", "LSglmnet", "MINTOLS", "BASE")
-color_methods <- c("red", "blue", "blue", "orange", "purple", "green", "brown", "darkgreen", "grey", "black")
+methods_toprint <- c("BU", "BASE", "BASE2", "MINTshr", "MINTols", "MINTsam",  "OLS", "L2-PBU", "L1-PBU", "G-L1-PBU")
 
-#nb_methods <- 9
-#name_methods <- c("LASSO", "SGLROW", "SGLCOL", "BU", "MINT", "LS", "NAIVE", "LSglmnet", "BASE")
-#color_methods <- c("red", "blue", "blue", "orange", "purple", "green", "brown", "darkgreen", "black")
+horizon_of_interest <- 1
+do.ratio <- TRUE
+tag <- "nips"
+experiment <- "small-unbiased"
+id_jobs <- 1986 # seq(2000, 2060) #1986 #seq(400, 450) #420 #seq(200, 210) #420 #c(200, 210)
+nb_simulations <- 10 #500
+ids_simulations <- seq(nb_simulations) # 37
+fmethod_agg <- "ARIMA"
+fmethod_bot <- "ARIMA"
+lambda_selection <- "1se" # "min"
 
-towards_pbu <- FALSE
-#towards_pbu <- FALSE
-lambda_selection <- "min"
-#lambda_selection <- "1se"
-
-njobs <- 2 # 14
-nb_simulations <- 130
-
-print("-----")
-print(paste("towards_pbu: ", towards_pbu, sep = ""))
-print(paste("lambda_selection: ", lambda_selection, sep = ""))
-print("-----")
-
-
+info_file <- file.path(results.folder, paste("info_", experiment, "_",  
+                                             fmethod_agg, "_", fmethod_bot, "_", id_jobs[1], "_", lambda_selection, ".Rdata", sep = ""))
+load(info_file)
 
 nbfiles <- 0
-results <- vector("list", njobs * nb_simulations)
+errors_simulations <- vector("list", length(id_jobs) * length(ids_simulations))
 
-for(idjob in seq(njobs)){
-  for(i in seq(nb_simulations)){
-    myfile <- file.path(getwd(), "../work", paste("results_", idjob, ".", i, "_", towards_pbu, "_", lambda_selection, ".Rdata", sep = ""))
+for(idjob in id_jobs){
+  for(i in ids_simulations){
+    if(i %% 50 == 0) print(i)
+    myfile <- file.path(results.folder, paste("results_", experiment, "_", fmethod_agg, "_", fmethod_bot, "_", idjob, ".", i, "_", lambda_selection, ".Rdata", sep = ""))
     if(file.exists(myfile)){
-        nbfiles <- nbfiles + 1
-        load(myfile) 
-        print(dim(Ytilde_test_allh))
-        res <- sapply(seq(nb_methods), function(imethod){
-          apply((Ytilde_test_allh[, , , imethod] - Y_test_allh)^2, c(1, 2), mean)
-         }, simplify = "array")
-        results[[nbfiles]] <-  res
+      nbfiles <- nbfiles + 1
+      load(myfile) 
+      
+      H <- length(results_allh)
+      errors <- lapply(seq(H), function(h){
+        FUTURE <-t(Y_test_allh[h, , ])
+        
+        res <- sapply(results_allh[[h]], function(results_method){
+          (results_method$predictions - FUTURE)^2
+        }, simplify = "array")
+        #browser()
+        #print(dim(res))
+        #print(length(names(results_allh[[h]])))
+        #dimnames(res)[3] <- names(results_allh[[h]])
+        res
+        #PRED <- simplify2array(lapply(results_allh[[h]], "[[", "predictions"))
+      })
+
+      errors_simulations[[nbfiles]] <-  errors
+      
     }
   }
 }
 
-err <- sapply(seq(nbfiles), function(ifile){
-  mean(results[[ifile]], na.rm = T)
+
+errors_all <- errors_simulations[seq(nbfiles)] ## seq() !!!!!!!!!!!!!
+
+
+h <- horizon_of_interest
+errors_h <- lapply(errors_all, function(obj){
+  obj[[h]]
+})
+errors_final <- lapply(errors_h, function(obj){
+  apply(obj, c(2, 3), mean)
 })
 
-#res_sort <- sort(err, decreasing = T, index = T)
-#print(res_sort)
-#myresults <- results[-res_sort$ix[seq(8)]]
-res_sort <- sort(err, decreasing = T, index = T); print(res_sort)
-
-myresults <- results[seq(nbfiles)] ## seq() !!!!!!!!!!!!!
-
-err_all <- Reduce("+", myresults)/length(myresults)
-
-err_sd <- sqrt(Reduce("+", lapply(myresults, function(mat){ (mat - err_all)^2}))/length(myresults))
-
-err_avgnodes <- apply(err_all, c(1, 3), mean)
-colnames(err_avgnodes) <- name_methods
-
-#####
-methods_toprint <- c("LASSO", "BU", "MINT", "LS", "NAIVE", "LSglmnet", "BASE")
-methods_toprint <- c("LASSO", "BU", "MINT", "LS", "LSglmnet", "BASE")
-methods_toprint <- c("LASSO", "BASE", "BU", "MINT", "MINTOLS", "LSglmnet")
-methods_toprint <- c("LASSO", "BASE", "BU", "MINT", "LSglmnet")
-#methods_toprint <- c("LASSO", "MINT")
-id.keep <- match(methods_toprint, name_methods)
+id.keep <- match(methods_toprint, dimnames(errors_final[[1]])[[2]])
+id.base <- match("BASE2", dimnames(errors_final[[1]])[[2]])
 
 
-#####
-plot.splitted <- TRUE
-if(TRUE){
-par(mfrow = c(3, 3))
-for(j in seq(7)){
+myfile <- paste(tag, "_", ifelse(do.ratio, "ratio", "absolute"), "_", experiment, "_", fmethod_agg, "_", fmethod_bot, sep = "")
+savepdf(file.path(pdf.folder, myfile), height = 26 * 0.9)
+par(mfrow = c(4, 2))
+par(cex.axis=.4)
+
+
+naggts <- nrow(A)
+nbts <- ncol(A)
+nts <- naggts + nbts
+groupings <- list(all = rep(1, nts), agg = c(rep(1, naggts), rep(0, nbts)), bot = c(rep(0, naggts), rep(1, nbts)))
+
+for(i in seq_along(groupings)){
+  mygroup <- which(groupings[[i]] == 1)
   
-  matplot(err_all[seq(10), j, id.keep], type = 'p', pch = 21, col = color_methods[id.keep], main = paste(towards_pbu, " - ", lambda_selection))
-  if(j == 1){
-    legend("topleft", name_methods[id.keep], col = color_methods[id.keep], lty = 1, cex = .5)
-  }
-  #barplot(err_all[1, j, id.keep])
-}
-}else{
-#####
-matplot(err_avgnodes[seq(10), id.keep], type = 'p', pch = 21, col = color_methods[id.keep], main = paste(towards_pbu, " - ", lambda_selection))
-#matpoints(err_avgnodes[, id.keep], col = color_methods[id.keep], type = 'p')
-legend("topleft", name_methods[id.keep], col = color_methods[id.keep], lty = 1, cex = .5)
-}
-#u <- apply(results[[1]], c(1, 3), mean)
-#matplot(u[seq(3), c(4, 5, 7, 8)])
-# 
-stop("done")
+  v <- sapply(errors_final, function(mat){
+    err_all <- mat[mygroup, id.keep]
+    err_ref <- mat[mygroup, id.base]
+    if(do.ratio){
+      err <- (apply(err_all, 2,  sum) - sum(err_ref))/sum(err_ref)
+    }else{
+      err <- apply(err_all, 2,  sum)
+    }
+    err
+  }, simplify = "array")
 
-###############
-res <- simplify2array(results)
-res <- apply(res, c(1, 2, 3), mean)
-par(mfrow = c(3, 3))
-for(j in seq(nb_methods)){
-  #matplot(res[, j, ], lty = 1, type = "l")
-  matplot(res[, j, ])
+  err_toplot <- t(v)
+  
+  boxplot(err_toplot, outline = F, 
+          main = paste(fmethod_agg, "-", fmethod_bot, " - ", "Total - ", nbfiles), cex = .5, col = color_methods[id.keep])
 }
-
-res_overall <- apply(res, c(1, 3), mean)
-matplot(res_overall)
-
-# check aggregates and bottom
+dev.off()
