@@ -6,8 +6,6 @@ if(length(args) == 0){
   experiment <- "small-unbiased"
   idjob <- 1
   nb_simulations <- 10
-  fmethod_agg <- "ARIMA"
-  fmethod_bot <- "ARIMA"
   lambda_selection <- "1se"
 }else{
   
@@ -18,20 +16,11 @@ if(length(args) == 0){
   experiment <- args[[1]]
   idjob <- as.numeric(args[[2]])
   nb_simulations <- as.numeric(args[[3]])
-  fmethod_agg <- args[[4]]
-  fmethod_bot <- args[[5]]
-  lambda_selection <- args[[6]]
+  lambda_selection <- args[[4]]
 }
 
 #set.seed(6120)
 set.seed(idjob)
-
-#print(experiment)
-#print(idjob)
-#print(nb_simulations)
-#print(fmethod_agg)
-#print(fmethod_bot)
-#print(lambda_selection)
 
 stopifnot(lambda_selection %in% c("min", "1se"))
 
@@ -63,9 +52,17 @@ nb_methods <- length(name_methods)
 # "NAIVE", "AVG", 
 #######
 
-mc.cores <- 3 # mc.cores.basef  AND mc.cores.methods
+config_forecast <- list(fit_fct = auto.arima, forecast_fct = Arima, 
+                        param_fit_fct = list(seasonal = FALSE, ic = "aic", max.p = 2, max.q = 2,  
+                                     approximation = TRUE, stationary = FALSE), 
+                        param_forecast_fct = list(use.initial.values = TRUE))
+config_forecast_agg <- config_forecast_bot <- config_forecast
+
+mc.cores.basef <- 10
+mc.cores.methods <- 10 # mc.cores.basef  AND mc.cores.methods
 nb.cores.cv <- 3
 
+H <- 3
 do.save <- TRUE
 refit_step <- 40
 sameP_allhorizons <- TRUE
@@ -117,10 +114,10 @@ for(i in seq(nb_simulations)){
   }
   
   my_bights <- bights(bts, A)
-  H <- 3
+ 
   if(i == 1){
     info_file <- file.path(results.folder, paste("info_", experiment, "_",
-                                                 fmethod_agg, "_", fmethod_bot, "_", idjob, "_", lambda_selection, ".Rdata", sep = ""))
+                                                 idjob, "_", lambda_selection, ".Rdata", sep = ""))
     #save(file = info_file, list = c("name_methods", "A"))
     save(file = info_file, list = c("A"))
   }
@@ -130,8 +127,7 @@ for(i in seq(nb_simulations)){
   print(paste("N = ", my_bights$nts * T_valid, " - p = ", my_bights$nbts * my_bights$nts, sep = ""))
 
   file_bf <- file.path(bf.folder, 
-              paste("bf_", experiment, "_", fmethod_agg, "_", 
-              fmethod_bot, "_", idjob, ".", i, "_", refit_step, ".Rdata", sep = ""))  
+              paste("bf_", experiment, "_", idjob, ".", i, "_", refit_step, ".Rdata", sep = ""))  
   
   if(do.save && file.exists(file_bf)){
     load(file_bf)
@@ -139,11 +135,13 @@ for(i in seq(nb_simulations)){
     ### valid
     list_subsets_valid <- lapply(seq(T_train, T_learn - H), function(i){c(i - T_train + 1, i)})
     data_valid <- makeMatrices(my_bights, list_subsets_valid, H = H, 
-                               fmethod_agg = fmethod_agg, fmethod_bot = fmethod_bot, refit_step = refit_step, mc.cores = mc.cores)
+                               config_forecast_agg = config_forecast_agg, config_forecast_bot = config_forecast_bot, 
+                               refit_step = refit_step, mc.cores = mc.cores)
     ### test
     list_subsets_test <- lapply(seq(T_learn, T_all - H), function(i){c(i - T_learn + 1, i)}) # I CHANGED it from T_TRAIN TO T_LEARN !!
     data_test <- makeMatrices(my_bights, list_subsets_test, H = H, 
-                              fmethod_agg = fmethod_agg, fmethod_bot = fmethod_bot, refit_step = refit_step, mc.cores = mc.cores)
+                              config_forecast_agg = config_forecast_agg, config_forecast_bot = config_forecast_bot, 
+                              refit_step = refit_step, mc.cores = mc.cores)
     
     if(do.save){
       save(file = file_bf, list = c("data_valid", "data_test", "list_subsets_valid", "list_subsets_test"))
@@ -282,7 +280,7 @@ Ytilde_test_allh <- array(NA, c(dim(Yhat_test_allh), nb_methods) )
       }
       
       list(obj_learn = obj_learn, predictions = predictions)
-    }, mc.cores = mc.cores)
+    }, mc.cores = mc.cores.methods)
     names(results) <- name_methods
     
     results[["BASE"]]   <- list(obj_learn = NULL, predictions = t(Yhat_test_allh[h, , ]))
@@ -294,8 +292,9 @@ Ytilde_test_allh <- array(NA, c(dim(Yhat_test_allh), nb_methods) )
 
 
   myfile <- file.path(results.folder, paste("results_", experiment, "_",
-                                          fmethod_agg, "_", fmethod_bot, "_", idjob, ".", i, "_", lambda_selection, ".Rdata", sep = ""))
-  save(file = myfile, list = c("results_allh", "Y_test_allh"))
+                                            idjob, ".", i, "_", lambda_selection, ".Rdata", sep = ""))
+  save(file = myfile, list = c("results_allh", "Y_test_allh", "config_forecast_agg", "config_forecast_bot"))
+  
 } # simulation
 
 

@@ -42,6 +42,7 @@ new_learnreg <- function(objreg, objhts, objmethod){
   }
   
   scaling_info <- list(mu_Y = mu_Y, mu_Yhat = mu_Yhat, sd_Yhat = sd_Yhat)
+  
     
   y <- fct_vec(Y_centered)
   X <- makeX(Yhat_scaled, objhts)

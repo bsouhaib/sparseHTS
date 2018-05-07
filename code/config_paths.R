@@ -1,4 +1,5 @@
-main.folder   <- "/Users/souhaibt/Dropbox/Code/hts_sparse"
+main.folder   <- "/home/rstudio/sparseHTS"
+# main.folder   <- "/Users/souhaibt/Dropbox/Code/hts_sparse"
 
 code.folder <- file.path(main.folder, "code")
 work.folder <- file.path(main.folder, "work")

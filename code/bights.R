@@ -31,6 +31,10 @@ bights <- function(bts, A) {
   yts[, seq(naggts)] <-  as.matrix(t(A %*% t(bts)))
   yts[, seq(naggts + 1, nts)] <- as.matrix(bts)
   
+  if(is.ts(bts)){
+    yts <- ts(yts, start(bts), freq = tsp(bts)[3])
+  }
+  
   output <- structure(
     list(yts = yts, A = A, S = S, nbts = nbts, naggts = naggts, nts = nts, Tobs = Tobs),
     class = c("bights")

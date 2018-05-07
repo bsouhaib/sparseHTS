@@ -15,15 +15,12 @@ horizon_of_interest <- 1
 do.ratio <- TRUE
 tag <- "nips"
 experiment <- "small-unbiased"
-id_jobs <- 1986 # seq(2000, 2060) #1986 #seq(400, 450) #420 #seq(200, 210) #420 #c(200, 210)
+id_jobs <- 1 # seq(2000, 2060) #1986 #seq(400, 450) #420 #seq(200, 210) #420 #c(200, 210)
 nb_simulations <- 10 #500
 ids_simulations <- seq(nb_simulations) # 37
-fmethod_agg <- "ARIMA"
-fmethod_bot <- "ARIMA"
 lambda_selection <- "1se" # "min"
 
-info_file <- file.path(results.folder, paste("info_", experiment, "_",  
-                                             fmethod_agg, "_", fmethod_bot, "_", id_jobs[1], "_", lambda_selection, ".Rdata", sep = ""))
+info_file <- file.path(results.folder, paste("info_", experiment, "_", id_jobs[1], "_", lambda_selection, ".Rdata", sep = ""))
 load(info_file)
 
 nbfiles <- 0
@@ -32,7 +29,7 @@ errors_simulations <- vector("list", length(id_jobs) * length(ids_simulations))
 for(idjob in id_jobs){
   for(i in ids_simulations){
     if(i %% 50 == 0) print(i)
-    myfile <- file.path(results.folder, paste("results_", experiment, "_", fmethod_agg, "_", fmethod_bot, "_", idjob, ".", i, "_", lambda_selection, ".Rdata", sep = ""))
+    myfile <- file.path(results.folder, paste("results_", experiment, "_", idjob, ".", i, "_", lambda_selection, ".Rdata", sep = ""))
     if(file.exists(myfile)){
       nbfiles <- nbfiles + 1
       load(myfile) 
@@ -74,7 +71,7 @@ id.keep <- match(methods_toprint, dimnames(errors_final[[1]])[[2]])
 id.base <- match("BASE2", dimnames(errors_final[[1]])[[2]])
 
 
-myfile <- paste(tag, "_", ifelse(do.ratio, "ratio", "absolute"), "_", experiment, "_", fmethod_agg, "_", fmethod_bot, sep = "")
+myfile <- paste(tag, "_", ifelse(do.ratio, "ratio", "absolute"), "_", experiment, sep = "")
 savepdf(file.path(pdf.folder, myfile), height = 26 * 0.9)
 par(mfrow = c(4, 2))
 par(cex.axis=.4)
@@ -102,6 +99,6 @@ for(i in seq_along(groupings)){
   err_toplot <- t(v)
   
   boxplot(err_toplot, outline = F, 
-          main = paste(fmethod_agg, "-", fmethod_bot, " - ", "Total - ", nbfiles), cex = .5, col = color_methods[id.keep])
+          main = paste("Total - ", nbfiles), cex = .5, col = color_methods[id.keep])
 }
 dev.off()
