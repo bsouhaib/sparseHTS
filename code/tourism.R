@@ -15,13 +15,15 @@ library(gglasso)
 
 
 #######
-name_methods <- c("BU", "MINTols", "MINTshr", "BASE","BASE2", 
-                  "L1", "L2",  "L1-PBU", "L2-PBU")
+#name_methods <- c("L1-PBU", "L1", "BU", "MINTols", "MINTshr", "BASE","BASE2", 
+#                  "L2", "L2-PBU")
+name_methods <- c("L1-PBU", "BU", "MINTols", "MINTshr", "BASE","BASE2", "L2-PBU")
 #, "G-L1-PBU"
 nb_methods <- length(name_methods)
 #######
 
 lambda_selection <- "1se"
+#lambda_selection <- "min"
 experiment <- "tourism"
 H <- 1
 
@@ -51,7 +53,7 @@ stopifnot(T_all == nrow(bts))
 
 
 mc.cores.basef <- 30 # 20
-mc.cores.methods <- 10 # mc.cores.basef  AND mc.cores.methods
+mc.cores.methods <- 7 #10 # mc.cores.basef  AND mc.cores.methods
 nb.cores.cv <- 3
 
 do.save <- TRUE
@@ -115,12 +117,12 @@ for(i in seq(nb_simulations)){
   #print(sgl_config)
   
   # naive predictions
-  id <- sapply(list_subsets_test, function(vec){ vec[2] })
-  predictions_naive <- my_bights$yts[id, ]
+  #id <- sapply(list_subsets_test, function(vec){ vec[2] })
+  #predictions_naive <- my_bights$yts[id, ]
   
-  predictions_avg <- t(sapply(list_subsets_test, function(vec){ 
-    apply(my_bights$yts[vec[1]:vec[2], ], 2, mean)
-  }))
+  #predictions_avg <- t(sapply(list_subsets_test, function(vec){ 
+  #  apply(my_bights$yts[vec[1]:vec[2], ], 2, mean)
+  #}))
   
   Ytilde_test_allh <- array(NA, c(dim(Yhat_test_allh), nb_methods) )
   
@@ -144,6 +146,8 @@ for(i in seq(nb_simulations)){
     config$cvglmnet$foldid <- foldid
     config$cvglmnet$nfolds <- NA
     config_gglasso$foldid <- foldid
+    
+    print("Starting methods")
     
     results <- mclapply(name_methods, function(current_method){
       #print(current_method)

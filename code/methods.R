@@ -56,8 +56,9 @@ new_learnreg <- function(objreg, objhts, objmethod){
     if(algo == "gOLS"){
       s <- 0
     }else if(algo == "LASSO"){
-      mylambdas <- c(model$lambda, seq(tail(model$lambda, 1), 0,length.out = 10))
-     
+      #mylambdas <- c(model$lambda, seq(tail(model$lambda, 1), 0,length.out = 10))
+      mylambdas <- model$lambda
+      
       do.parallel <- FALSE
       if(nb.cores.cv > 1){
         do.parallel <- TRUE
@@ -69,6 +70,8 @@ new_learnreg <- function(objreg, objhts, objmethod){
                          list(lambda = mylambdas), 
                          list(parallel = do.parallel)))
       s <- ifelse(objmethod$selection == "min", "lambda.min", "lambda.1se")
+      
+      
     }
   }else if(algo == "GGLASSO"){
     group1 <- rep(seq(objhts$nts), objhts$nbts)

@@ -8,8 +8,10 @@ color_methods <- c("orange", "yellowgreen", "purple", "deeppink", "pink", "yello
                    "slategray4", "slategray", "aquamarine")
 nb_methods <- length(color_methods)
 #######
-
 methods_toprint <- c("BU", "BASE", "BASE2", "MINTshr", "MINTols", "MINTsam",  "OLS", "L2-PBU", "L1-PBU")
+
+#methods_toprint <- c("BU", "BASE", "BASE2", "MINTshr", "MINTols", "L2-PBU", "L1-PBU")
+#c("L1-PBU", "BU", "MINTols", "MINTshr", "BASE","BASE2", "L2-PBU")
 
 horizon_of_interest <- 1
 do.ratio <- FALSE
@@ -18,9 +20,9 @@ experiment <- "tourism"
 id_jobs <- 1 # seq(2000, 2060) #1986 #seq(400, 450) #420 #seq(200, 210) #420 #c(200, 210)
 nb_simulations <- 1 #500
 ids_simulations <- seq(nb_simulations) # 37
-fmethod_agg <- "ETS"
-fmethod_bot <- "ETS"
-lambda_selection <- "1se" # "min"
+lambda_selection <- "1se"
+#lambda_selection <- "min"
+
 
 info_file <- file.path(results.folder, paste("info_", experiment, "_", lambda_selection, ".Rdata", sep = ""))
 load(info_file)
@@ -72,7 +74,7 @@ id.keep <- match(methods_toprint, dimnames(errors_final[[1]])[[2]])
 id.base <- match("BASE2", dimnames(errors_final[[1]])[[2]])
 
 
-myfile <- paste(tag, "_", ifelse(do.ratio, "ratio", "absolute"), "_", experiment, sep = "")
+myfile <- paste(tag, "_", ifelse(do.ratio, "ratio", "absolute"), "_", experiment, "_", lambda_selection, sep = "")
 savepdf(file.path(pdf.folder, myfile), height = 26 * 0.9)
 par(mfrow = c(4, 2))
 par(cex.axis=.4)
