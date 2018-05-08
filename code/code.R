@@ -11,6 +11,7 @@ makeMatrices <- function(obj_bights, list_subsets, H, config_forecast_agg, confi
   #results <- lapply(seq(n), function(j){
   #  rolling.forecast(obj_bights$yts[, j], list_subsets, H, algos[j], refit_step = refit_step)
   #})
+  
   results <- mclapply(seq(n), function(j){
     if(j <= n-m){
       config_forecast <- config_forecast_agg
@@ -24,10 +25,13 @@ makeMatrices <- function(obj_bights, list_subsets, H, config_forecast_agg, confi
   Y <- simplify2array(lapply(results, "[[", "future"))
   Eresiduals <- simplify2array(lapply(results, "[[", "e_residuals"))
   
+  IN_y    <- simplify2array(lapply(results, "[[", "insample_y"))
+  IN_yhat <- simplify2array(lapply(results, "[[", "insample_yhat"))
+  
   Yhat <- aperm(Yhat, c(2, 3, 1))
   Y    <- aperm(Y, c(2, 3, 1))
 
-  list(Yhat = Yhat, Y = Y, Eresiduals = Eresiduals)
+  list(Yhat = Yhat, Y = Y, Eresiduals = Eresiduals, IN_y = IN_y, IN_yhat = IN_yhat)
 }  
 
 
@@ -35,6 +39,7 @@ rolling.forecast <- function(series, list_subsets, H, config_forecast, refit_ste
   n_subsets <- length(list_subsets)
   predictions <- future <- matrix(NA, nrow = n_subsets, ncol = H)  
   e_residuals <- NULL
+  insample_yhat <- insample_y <- NULL
   
   fit_fct <- config_forecast$fit_fct  
   forecast_fct <- config_forecast$forecast_fct
@@ -73,13 +78,15 @@ rolling.forecast <- function(series, list_subsets, H, config_forecast, refit_ste
     
     if(i == 1){
       e_residuals <- as.numeric(resid(model))
+      insample_y <- as.numeric(learn_series)
+      insample_yhat <- as.numeric(fitted(model))
     }
     
     predictions[i, ] <- forecast(model, h = H)$mean
     future[i, ] <- series[ts_split[2] + seq(1, H)]
   }
   
-  output <- list(future = future, predictions = predictions, e_residuals = e_residuals)
+  output <- list(future = future, predictions = predictions, e_residuals = e_residuals, insample_y = insample_y, insample_yhat = insample_yhat)
 }
 
 #fit_fct <- function(series, fmethod = c("ARIMA", "ETS")){

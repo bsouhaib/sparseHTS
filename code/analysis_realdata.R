@@ -8,18 +8,15 @@ color_methods <- c("orange", "yellowgreen", "purple", "deeppink", "pink", "yello
                    "slategray4", "slategray", "aquamarine")
 nb_methods <- length(color_methods)
 #######
-methods_toprint <- c("BU", "BASE", "BASE2", "MINTshr", "MINTols", "MINTsam",  "OLS", "L2-PBU", "L1-PBU")
+methods_toprint <- c("BU", "BASE", "BASE2", "MINTshr", "MINTols", "MINTsam",  "OLS", "L2-PBU", "L1-PBU", "L1", "L2")
 
 #methods_toprint <- c("BU", "BASE", "BASE2", "MINTshr", "MINTols", "L2-PBU", "L1-PBU")
 #c("L1-PBU", "BU", "MINTols", "MINTshr", "BASE","BASE2", "L2-PBU")
 
 horizon_of_interest <- 1
 do.ratio <- FALSE
-tag <- "nips"
-experiment <- "tourism"
-id_jobs <- 1 # seq(2000, 2060) #1986 #seq(400, 450) #420 #seq(200, 210) #420 #c(200, 210)
-nb_simulations <- 1 #500
-ids_simulations <- seq(nb_simulations) # 37
+tag <- "nips_meters"
+experiment <- "meters" #"tourism" #"meters" #
 lambda_selection <- "1se"
 #lambda_selection <- "min"
 
@@ -27,15 +24,11 @@ lambda_selection <- "1se"
 info_file <- file.path(results.folder, paste("info_", experiment, "_", lambda_selection, ".Rdata", sep = ""))
 load(info_file)
 
-nbfiles <- 0
-errors_simulations <- vector("list", length(id_jobs) * length(ids_simulations))
 
-for(idjob in id_jobs){
-  for(i in ids_simulations){
-    if(i %% 50 == 0) print(i)
-    myfile <- file.path(results.folder, paste("results_", experiment, "_", i, "_", lambda_selection, ".Rdata", sep = ""))
-    if(file.exists(myfile)){
-      nbfiles <- nbfiles + 1
+    myfile <- file.path(results.folder, paste("results_", experiment, "_", lambda_selection, ".Rdata", sep = ""))
+    if(!file.exists(myfile)){
+     stop("FILE DOES NOT EXIST")
+    }
       load(myfile) 
       
       H <- length(results_allh)
@@ -52,26 +45,20 @@ for(idjob in id_jobs){
         res
         #PRED <- simplify2array(lapply(results_allh[[h]], "[[", "predictions"))
       })
-      
-      errors_simulations[[nbfiles]] <-  errors
-      
-    }
-  }
-}
-
-errors_all <- errors_simulations[seq(nbfiles)] ## seq() !!!!!!!!!!!!!
-
+    
+errors_all <- errors
 
 h <- horizon_of_interest
-errors_h <- lapply(errors_all, function(obj){
-  obj[[h]]
-})
-errors_final <- lapply(errors_h, function(obj){
-  apply(obj, c(2, 3), mean)
-})
+errors_h <- errors_all[[h]]
+ 
+errors_final <- apply(errors_h, c(2, 3), mean)
 
-id.keep <- match(methods_toprint, dimnames(errors_final[[1]])[[2]])
-id.base <- match("BASE2", dimnames(errors_final[[1]])[[2]])
+#errors_final <- lapply(errors_h, function(obj){
+#  apply(obj, c(2, 3), mean)
+#})
+
+id.keep <- match(methods_toprint, dimnames(errors_final)[[2]])
+id.base <- match("BASE2", dimnames(errors_final)[[2]])
 
 
 myfile <- paste(tag, "_", ifelse(do.ratio, "ratio", "absolute"), "_", experiment, "_", lambda_selection, sep = "")
@@ -88,7 +75,8 @@ groupings <- list(all = rep(1, nts), agg = c(rep(1, naggts), rep(0, nbts)), bot 
 for(i in seq_along(groupings)){
   mygroup <- which(groupings[[i]] == 1)
   
-  v <- sapply(errors_final, function(mat){
+  mat <- errors_final
+  #v <- sapply(errors_final, function(mat){
     err_all <- mat[mygroup, id.keep]
     err_ref <- mat[mygroup, id.base]
     if(do.ratio){
@@ -97,11 +85,23 @@ for(i in seq_along(groupings)){
       err <- apply(err_all, 2,  sum)
     }
     err
-  }, simplify = "array")
-  
+  #}, simplify = "array")
+  v <- err
   err_toplot <- t(v)
   
   boxplot(err_toplot, outline = F, 
-          main = paste("Total - ", nbfiles), cex = .5, col = color_methods[id.keep])
+          main = paste("Total - "), cex = .5, col = color_methods[id.keep])
 }
 dev.off()
+
+stop("done")
+#######
+results <- results_allh[[1]]
+#MAT <- results[[1]]$predictions
+
+FUTURE <-t(Y_test_allh[h, , ])
+v <- sapply(seq_along(results), function(imethod){results[[imethod]]$predictions}, simplify = "array")
+for(j in seq(20, 100)){
+  matplot(cbind(v[, j, c(1, 2, 3, 5)], FUTURE[, j]), col = c("darkblue", "red", "purple", "cyan", "black"), type = 'l', lty = 1)
+  browser()
+}

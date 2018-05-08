@@ -3,6 +3,8 @@ new_learnreg <- function(objreg, objhts, objmethod){
   Y <- objreg$Y
   Yhat <- objreg$Yhat
   
+
+  
   # Penalize towards a certain P matrix?
   if(!is.null(objmethod$Ptowards)){
     Y <- as.matrix(Y - Yhat %*% t(objmethod$Ptowards) %*% t(objhts$S))
@@ -71,7 +73,7 @@ new_learnreg <- function(objreg, objhts, objmethod){
                          list(parallel = do.parallel)))
       s <- ifelse(objmethod$selection == "min", "lambda.min", "lambda.1se")
       
-      
+      #browser()
     }
   }else if(algo == "GGLASSO"){
     group1 <- rep(seq(objhts$nts), objhts$nbts)

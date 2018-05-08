@@ -13,6 +13,7 @@ library(methods)
 library(doMC)
 library(gglasso)
 
+source("../../PROJ/code/config_general.R")
 
 #######
 #name_methods <- c("L1-PBU", "L1", "BU", "MINTols", "MINTshr", "BASE","BASE2", 
@@ -20,11 +21,11 @@ library(gglasso)
 #name_methods <- c("L1-PBU", "BU", "MINTols", "MINTshr", "BASE","BASE2", "L2-PBU")
 #, "G-L1-PBU"
 
-name_methods <- c("L1-PBU", "BU", "MINTshr", "MINTols", "BASE2")
+#name_methods <- c("L1-PBU", "BU", "MINTshr", "MINTols", "BASE2")
+#name_methods <- c("L1-PBU", "BU", "MINTshr", "MINTols", "BASE2")
+name_methods <- c("L1-PBU", "BU", "MINTols", "MINTshr", "BASE","BASE2", "L2-PBU", "L1", "L2")
 nb_methods <- length(name_methods)
 #######
-
-add.training <- TRUE
 
 #config_main <- list(intercept = FALSE, standardize = FALSE, alpha = .98, thresh = 10^-6, nlambda = 50)
 config_main <- list(intercept = FALSE, standardize = FALSE, alpha = 1, thresh = 10^-6, nlambda = 50)
@@ -32,74 +33,33 @@ config_cvglmnet <- c(config_main, list(nfolds = 3))
 
 lambda_selection <- "1se"
 #lambda_selection <- "min"
-experiment <- "tourism"
-H <- 1
+experiment <- "meters"
+H <- 5
 
-mc.cores.basef <- 30 # 20
 mc.cores.methods <- 5 #10 # mc.cores.basef  AND mc.cores.methods
 nb.cores.cv <- 3
 
-do.save <- TRUE
-refit_step <- 1
-sameP_allhorizons <- TRUE
-nb_simulations <- 1
+sameP_allhorizons <- FALSE
 
 
-# CONSIDER ETS ????
-config_forecast <- list(fit_fct = auto.arima, forecast_fct = Arima, 
-                        param_fit_fct = list(seasonal = TRUE, ic = "aic",  max.p = 2, max.q = 2,
-                                             approximation = TRUE, stationary = FALSE, num.cores = 2), 
-                        param_forecast_fct = list(use.initial.values = TRUE))
-config_forecast_agg <- config_forecast_bot <- config_forecast
+#load(file.path(file.path("/home/rstudio/PROJ", "work"), "myinfo.Rdata"))
+sparsehts.work.folder <- file.path("/home/rstudio/sparseHTS", "work")
+load(file.path(sparsehts.work.folder, "myinfo.Rdata"))
+
+source(file.path("/home/rstudio/PROJ/code", "config_splitting.R"))
 
 
-X <- read.csv("../data/Tourism data_v3.csv")
-Z <- X[, -seq(2)]
-vec <- colnames(Z)
-y <- gts(Z, characters = list(c(1, 1, 1), c(3)))
-S <- smatrix(y)
-ally <- allts(y)
-bts <- Z
-bts <- ts(bts, c(1998, 1), freq = 12)
-A <- head(S, nrow(S) - ncol(Z))
-
-T_train <- 96 # 7
-T_valid <- 60 # 5
-T_learn <- T_train + T_valid
-T_test <- 72
-T_all <- T_learn + T_test
-stopifnot(T_all == nrow(bts))
-
+A <- Sagg
+bts <- matrix(NA, nrow = length(learn$id) + length(test$id), ncol = n_bottom)
 my_bights <- bights(bts, A)
-info_file <- file.path(results.folder, paste("info_", experiment, "_", lambda_selection, ".Rdata", sep = ""))
-save(file = info_file, list = c("A"))
- 
-  
-  print(paste(" m = ", my_bights$nbts, " - n = ", my_bights$nts, sep = ""))
-  print(paste("Tvalid = ", T_valid, sep = ""))
-  print(paste("N = ", my_bights$nts * T_valid, " - p = ", my_bights$nbts * my_bights$nts, sep = ""))
-  
 
-  file_bf <- file.path(bf.folder, 
-                       paste("bf_", experiment, "_", refit_step, ".Rdata", sep = ""))  
+info_file <- file.path(results.folder, paste("info_", experiment, "_", lambda_selection, ".Rdata", sep = ""))
+#save(file = info_file, list = c("name_methods", "A"))
+save(file = info_file, list = c("A"))
   
-  if(do.save && file.exists(file_bf)){
-    load(file_bf)
-  }else{
-    ### valid
-    list_subsets_valid <- lapply(seq(T_train, T_learn - H), function(i){c(i - T_train + 1, i)})
-    data_valid <- makeMatrices(my_bights, list_subsets_valid, H = H, 
-                               config_forecast_agg = config_forecast_agg, config_forecast_bot = config_forecast_bot, 
-                               refit_step = refit_step, mc.cores = mc.cores)
-    ### test
-    list_subsets_test <- lapply(seq(T_learn, T_all - H), function(i){c(i - T_learn + 1, i)}) # I CHANGED it from T_TRAIN TO T_LEARN !!
-    data_test <- makeMatrices(my_bights, list_subsets_test, H = H, 
-                              config_forecast_agg = config_forecast_agg, config_forecast_bot = config_forecast_bot, 
-                              refit_step = refit_step, mc.cores = mc.cores)
-    if(do.save){
-      save(file = file_bf, list = c("data_valid", "data_test", "list_subsets_valid", "list_subsets_test"))
-    }
-  }
+  file_bf <- file.path(bf.folder, 
+                       paste("bf_", experiment, ".Rdata", sep = ""))  
+  load(file_bf)
   
   ### valid
   Yhat_valid_allh <- data_valid$Yhat
@@ -108,8 +68,12 @@ save(file = info_file, list = c("A"))
   ### test
   Yhat_test_allh  <- data_test$Yhat
   Y_test_allh    <- data_test$Y
-  Eresiduals <- data_test$Eresiduals
-  #stop("done")
+  
+
+  #Eresiduals <- data_test$Eresiduals
+  ids <- which(calendar$periodOfDay[tail(learn$id, - n_past_obs_kd)] == H)
+  Eresiduals <- data_test$Eresiduals[ids, ]
+  
   save_Yhat_test_allh <- Yhat_test_allh
   
   # 
@@ -143,18 +107,10 @@ save(file = info_file, list = c("A"))
     Y_valid_h    <- t(Y_valid_allh[h, , ])
     Yhat_test_h  <- t(Yhat_test_allh[h, , ])
     
+    objreg_valid <- list(y = makey(Y_valid_h), X = makeX(Yhat_valid_h, my_bights), Y = Y_valid_h, Yhat = Yhat_valid_h)
+    objreg_test <- list(X = makeX(Yhat_test_h, my_bights), Yhat = Yhat_test_h)
     
-    #if(add.training && h == 1){
-    #  Yhat_valid_h <- rbind(Yhat_valid_h, data_valid$IN_yhat)
-    #  Y_valid_h <- rbind(Y_valid_h, data_valid$IN_y)
-    #}
-    
-    objreg_valid <- list(y = makey(Y_valid_h), X = makeX(Yhat_valid_h, my_bights), Y = Y_valid_h, Yhat = Yhat_valid_h, 
-                         Yhat_intercept = cbind(Yhat_valid_h, rep(1, nrow(Yhat_valid_h)) ) )
-    objreg_test <- list(X = makeX(Yhat_test_h, my_bights), Yhat = Yhat_test_h,
-                        Yhat_intercept = cbind(Yhat_test_h, rep(1, nrow(Yhat_test_h)) ) )
-
-    
+    #browser()
     #foldid <- rep(sample(seq(config$cvglmnet$nfolds), nValid, replace = T), my_bights$nts)
     #glmnet_config_local <- c(glmnet_config, list(foldid = foldid))
     #glmnet_config_local$nfolds <- NA
@@ -162,7 +118,7 @@ save(file = info_file, list = c("A"))
     foldid <- make_foldid(nValid, my_bights$nts, config$cvglmnet$nfolds)
     
     config$cvglmnet$foldid <- foldid
-    config$cvglmnet$nfolds <- NA
+    #config$cvglmnet$nfolds <- NA
     config_gglasso$foldid <- foldid
     
     print("Starting methods")

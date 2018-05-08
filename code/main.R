@@ -52,6 +52,9 @@ nb_methods <- length(name_methods)
 # "NAIVE", "AVG", 
 #######
 
+config_main <- list(intercept = FALSE, standardize = FALSE, alpha = .98, thresh = 10^-6, nlambda = 50)
+config_cvglmnet <- c(config_main, list(nfolds = 3))
+
 config_forecast <- list(fit_fct = auto.arima, forecast_fct = Arima, 
                         param_fit_fct = list(seasonal = FALSE, ic = "aic", max.p = 2, max.q = 2,  
                                      approximation = TRUE, stationary = FALSE), 
@@ -159,7 +162,7 @@ for(i in seq(nb_simulations)){
 
   save_Yhat_test_allh <- Yhat_test_allh
   
-  stop("done")
+  #stop("done")
   
 if(add.bias){
   #hat_all <- Y_valid_allh[1, , ]
@@ -198,22 +201,26 @@ if(add.bias){
   }))
   Yhat_test_allh[1, , ] <- Yhat_test_allh[1, , ] + MYBIAS_test  
 }
+  
+  config_basic <- config_main
+  config <- list(glmnet = config_basic, cvglmnet = config_cvglmnet)
+  config_gglasso <- list(eps = 10^-6, nlambda = 50, intercept = FALSE, maxit = 1e+7)
 
-config_basic <- list(intercept = FALSE, standardize = FALSE, alpha = .98, thresh = 10^-6, nlambda = 50)
-config <- list(glmnet = config_basic, cvglmnet = c(config_basic, list(nfolds = 3)))
-config_gglasso <- list(eps = 10^-6, nlambda = 50, intercept = FALSE, maxit = 1e+7)
+#config_basic <- list(intercept = FALSE, standardize = FALSE, alpha = .98, thresh = 10^-6, nlambda = 50)
+#config <- list(glmnet = config_basic, cvglmnet = c(config_basic, list(nfolds = 3)))
+#config_gglasso <- list(eps = 10^-6, nlambda = 50, intercept = FALSE, maxit = 1e+7)
 
 #sgl_config    <- list(nfold = 3, standardize = FALSE, alpha = .8)
 #print(glmnet_config)
 #print(sgl_config)
 
 # naive predictions
-id <- sapply(list_subsets_test, function(vec){ vec[2] })
-predictions_naive <- my_bights$yts[id, ]
+#id <- sapply(list_subsets_test, function(vec){ vec[2] })
+#predictions_naive <- my_bights$yts[id, ]
 
-predictions_avg <- t(sapply(list_subsets_test, function(vec){ 
-         apply(my_bights$yts[vec[1]:vec[2], ], 2, mean)
-}))
+#predictions_avg <- t(sapply(list_subsets_test, function(vec){ 
+#         apply(my_bights$yts[vec[1]:vec[2], ], 2, mean)
+#}))
 
 Ytilde_test_allh <- array(NA, c(dim(Yhat_test_allh), nb_methods) )
 
@@ -230,10 +237,14 @@ Ytilde_test_allh <- array(NA, c(dim(Yhat_test_allh), nb_methods) )
     objreg_test <- list(X = makeX(Yhat_test_h, my_bights), Yhat = Yhat_test_h,
                         Yhat_intercept = cbind(Yhat_test_h, rep(1, nrow(Yhat_test_h)) ) )
     
-    nValid <- nrow(Yhat_valid_h)
-    foldid <- rep(sample(seq(config$cvglmnet$nfolds), nValid, replace = T), my_bights$nts)
+    #nValid <- nrow(Yhat_valid_h)
+    #foldid <- rep(sample(seq(config$cvglmnet$nfolds), nValid, replace = T), my_bights$nts)
     #glmnet_config_local <- c(glmnet_config, list(foldid = foldid))
     #glmnet_config_local$nfolds <- NA
+    
+    nValid <- nrow(Yhat_valid_h)
+    foldid <- make_foldid(nValid, my_bights$nts, config$cvglmnet$nfolds)
+    
     config$cvglmnet$foldid <- foldid
     config$cvglmnet$nfolds <- NA
     config_gglasso$foldid <- foldid

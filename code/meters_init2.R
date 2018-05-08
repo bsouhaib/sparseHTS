@@ -1,12 +1,15 @@
 rm(list = ls())
 
+sparsehts.work.folder <- file.path("/home/rstudio/sparseHTS", "work")
+load(file.path(sparsehts.work.folder, "myinfo.Rdata"))
+
 source("../../PROJ/code/config_paths.R")
 source("../../PROJ/code/config_general.R")
 source("../../PROJ/code/config_splitting.R")
 #source("../../PROJ/code/jasa_utils.R")
 source("../../PROJ/code/utils.R")
 
-load(file.path(work.folder, "myinfo.Rdata"))
+
 
 #stop("RUN AGAIN WITH RECENT FORECASTS")
 
@@ -17,12 +20,14 @@ load(res_file)
 Xhat_learn <- Xhat_learn[, -which(colnames(Xhat_learn) %in% c("C1", "S1"))]
 Xhat_test  <- Xhat_test[, -which(colnames(Xhat_test) %in% c("C1", "S1"))]
 
+Xhat_learn <- Xhat_learn[, which(colnames(Xhat_learn) %in% c(aggSeries, bottomSeries))]
+Xhat_test  <- Xhat_test[, which(colnames(Xhat_test) %in% c(aggSeries, bottomSeries))]
+
+
 # length(train$id)
 # length(valid$id)
 # length(learn$id)
 # length(test$id)
-
-pday <- 1
 
 ######
 n_series <- n_agg + n_bottom
@@ -42,35 +47,54 @@ for(j in seq(n_series)){
   Ytest[, j]  <- demand[test$id]
 }
 
-# Ylearn AND Xhat_learn (learn)
-myids <- c(head(validation$id, 1) - seq(48 * 60, 1), validation$id)
-ids <- which((learn$id %in% myids) & (pday_learn == pday))
-Yforecast <- Xhat_learn[ids, ]
-Ytrue <- Ylearn[ids, ]
-Yforecast <- t(Yforecast)
-Ytrue <- t(Ytrue)
+#pday <- 1
+pdays <- seq(10)
+list_yhat_valid <- list_yhat_test <- vector("list", length(pdays))
+list_y_valid <- list_y_test <- vector("list", length(pdays))
 
-Yhat <- Y <- array(NA, c(1, dim(Yforecast)))
-Yhat[1, , ] <- Yforecast
-Y[1, , ] <- Ytrue
+for(pday in pdays){
+  # Ylearn AND Xhat_learn (learn)
+  myids <- c(head(validation$id, 1) - seq(48 * 60 * 2, 1), validation$id)
+  ids <- which((learn$id %in% myids) & (pday_learn == pday))
+  Yforecast <- Xhat_learn[ids, ]
+  Ytrue <- Ylearn[ids, ]
+  Yforecast <- t(Yforecast)
+  Ytrue <- t(Ytrue)
+  
+  #Yhat <- Y <- array(NA, c(1, dim(Yforecast)))
+  #Yhat[1, , ] <- Yforecast
+  #Y[1, , ] <- Ytrue
+  
+  list_yhat_valid[[pday]] <- Yforecast
+  list_y_valid[[pday]] <- Ytrue
+  
+  # Ytest AND Xhat_test (test)
+  ids <- which(pday_test == pday)
+  Yforecast <- Xhat_test[ids, ]
+  Ytrue <- Ytest[ids, ]
+  Yforecast <- t(Yforecast)
+  Ytrue <- t(Ytrue)
+  
+  #Yhat <- Y <- array(NA, c(1, dim(Yforecast)))
+  #Yhat[1, , ] <- Yforecast
+  #Y[1, , ] <- Ytrue
+  
+  list_yhat_test[[pday]] <- Yforecast
+  list_y_test[[pday]] <- Ytrue
+}
+
 data_valid <- NULL
-data_valid$Yhat <- Yhat
-data_valid$Y <- Y
+data_valid$Yhat <- aperm(simplify2array(list_yhat_valid), c(3, 1, 2))
+data_valid$Y    <- aperm(simplify2array(list_y_valid), c(3, 1, 2))
 
-# Ytest AND Xhat_test (test)
-ids <- which(pday_test == pday)
-Yforecast <- Xhat_test[ids, ]
-Ytrue <- Ytest[ids, ]
-
-Yhat <- Y <- array(NA, c(1, dim(Yforecast)))
-Yhat[1, , ] <- Yforecast
-Y[1, , ] <- Ytrue
 data_test <- NULL
-data_test$Yhat <- Yhat
-data_test$Y <- Y
+data_test$Yhat <- aperm(simplify2array(list_yhat_test), c(3, 1, 2))
+data_test$Y    <- aperm(simplify2array(list_y_test), c(3, 1, 2))
+
 
 # Eresiduals
-n_past_obs_kd <- 
+n_past_obs_kd    <- 60 *48
+n_total <- n_series
 R_onestep <- matrix(NA, nrow = length(learn$id) - n_past_obs_kd, ncol = n_total)
 
 for(do.agg in c(TRUE, FALSE)){
@@ -107,4 +131,9 @@ for(do.agg in c(TRUE, FALSE)){
   }
 }
 
+data_test$Eresiduals <- R_onestep
 
+source("config_paths.R")
+file_bf <- file.path(bf.folder, 
+                     paste("bf_", "meters", ".Rdata", sep = "")) 
+save(file = file_bf, list = c("data_valid", "data_test"))

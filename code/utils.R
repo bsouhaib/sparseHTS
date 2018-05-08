@@ -1,3 +1,15 @@
+make_foldid <- function(n, p, K){
+  n_k <- floor(n/K)
+  x <- rep(seq(K), each = n_k)
+  
+  r <- n - n_k * K
+  if(r > 0){
+    x <- c(x, sample(K, r))
+  }
+  x <- sample(x)
+  rep(x, p)
+}
+
 pbu <- function(objhts){
   
   #0_{m x (n-m)} I_m
