@@ -10,7 +10,6 @@ source("../../PROJ/code/config_splitting.R")
 source("../../PROJ/code/utils.R")
 
 
-
 #stop("RUN AGAIN WITH RECENT FORECASTS")
 
 res_file <- file.path(work.folder, "revisedf", paste("revised_meanf_Xmatrix_", algo.agg, "_", algo.bottom, ".Rdata", sep = ""))
@@ -38,49 +37,74 @@ for(j in seq(n_series)){
     print(j)
   if(j <= n_agg){
     idseries <- aggSeries[j]
-    load(file.path(aggseries.folder, paste("series-", idseries, ".Rdata", sep = "")))
   }else{
     idseries <- bottomSeries[j - n_agg]
-    load(file.path(mymeters.folder, paste("mymeter-", idseries, ".Rdata", sep = "")))
   }
+  
+  myfile <- file.path(aggseries.folder, paste("series-", idseries, ".Rdata", sep = ""))
+  if(!file.exists(myfile)){
+    myfile <- file.path(mymeters.folder, paste("mymeter-", idseries, ".Rdata", sep = ""))
+  }
+  load(myfile)
+  
   Ylearn[, j] <- demand[learn$id]
   Ytest[, j]  <- demand[test$id]
 }
 
 #pday <- 1
-pdays <- seq(10)
+pdays <- seq(48)
 list_yhat_valid <- list_yhat_test <- vector("list", length(pdays))
 list_y_valid <- list_y_test <- vector("list", length(pdays))
 
+Yhat <- rbind(Xhat_learn, Xhat_test)
+Y    <- rbind(Ylearn, Ytest)
+ypday <- c(pday_learn, pday_test)
+
+###
+id_learn <- c(validation$id, head(test$id, 48 * 60))
+id_test <- tail(test$id, 48 * 32)
+#id_learn <- c(head(test$id, 48 * 60))
+#id_test <- tail(test$id, 48 * 32)
+###  
+
+Yhat_learn <- Yhat[id_learn, ]
+Y_learn    <- Y[id_learn, ]
+hday_learn <- ypday[id_learn]
+  
+Yhat_test <- Yhat[id_test, ]
+Y_test    <- Y[id_test, ]
+hday_test <- ypday[id_test]
+
 for(pday in pdays){
-  # Ylearn AND Xhat_learn (learn)
-  myids <- c(head(validation$id, 1) - seq(48 * 60 * 2, 1), validation$id)
-  ids <- which((learn$id %in% myids) & (pday_learn == pday))
-  Yforecast <- Xhat_learn[ids, ]
-  Ytrue <- Ylearn[ids, ]
-  Yforecast <- t(Yforecast)
-  Ytrue <- t(Ytrue)
   
-  #Yhat <- Y <- array(NA, c(1, dim(Yforecast)))
-  #Yhat[1, , ] <- Yforecast
-  #Y[1, , ] <- Ytrue
+  if(pday == 48){
+    local_pday <- c(pday - 1, pday)
+  }else{
+    local_pday <- c(pday, pday +1)
+  }
+  # local_pday <- pday
   
-  list_yhat_valid[[pday]] <- Yforecast
-  list_y_valid[[pday]] <- Ytrue
+  # 
+  ids <- which(hday_learn %in% local_pday)
+  Yforecast_learn <- Yhat_learn[ids, ]
+  Ytrue_learn <- Y_learn[ids, ]
+
+  #
+  ids <- which(hday_test == pday)
+  Yforecast_test <- Yhat_test[ids, ]
+  Ytrue_test <- Y_test[ids, ]
+
+  Yforecast_learn <- t(Yforecast_learn)
+  Ytrue_learn <- t(Ytrue_learn)
   
-  # Ytest AND Xhat_test (test)
-  ids <- which(pday_test == pday)
-  Yforecast <- Xhat_test[ids, ]
-  Ytrue <- Ytest[ids, ]
-  Yforecast <- t(Yforecast)
-  Ytrue <- t(Ytrue)
+  Yforecast_test <- t(Yforecast_test)
+  Ytrue_test     <- t(Ytrue_test)
   
-  #Yhat <- Y <- array(NA, c(1, dim(Yforecast)))
-  #Yhat[1, , ] <- Yforecast
-  #Y[1, , ] <- Ytrue
+  list_yhat_valid[[pday]] <- Yforecast_learn
+  list_y_valid[[pday]] <- Ytrue_learn
   
-  list_yhat_test[[pday]] <- Yforecast
-  list_y_test[[pday]] <- Ytrue
+  list_yhat_test[[pday]] <- Yforecast_test
+  list_y_test[[pday]] <- Ytrue_test
 }
 
 data_valid <- NULL
@@ -94,44 +118,32 @@ data_test$Y    <- aperm(simplify2array(list_y_test), c(3, 1, 2))
 
 # Eresiduals
 n_past_obs_kd    <- 60 *48
-n_total <- n_series
-R_onestep <- matrix(NA, nrow = length(learn$id) - n_past_obs_kd, ncol = n_total)
+# n_total <- n_series
+# R_onestep <- matrix(NA, nrow = length(learn$id) - n_past_obs_kd, ncol = n_total)
 
-for(do.agg in c(TRUE, FALSE)){
-  if(do.agg){
-    set_series <- aggSeries
-    algo <- algo.agg
-  }else{
-    set_series <- bottomSeries
-    algo <- algo.bottom
+mat_residuals <- sapply(c(aggSeries, bottomSeries), function(idseries){
+  print(idseries)
+  myfile <-  resid_MINT_file <- file.path(insample.folder, "KD-IC-NML", paste("residuals_MINT_", idseries, "_", "KD-IC-NML", ".Rdata", sep = "")) 
+  filekd <- file.exists(myfile)	
+  if(!filekd){
+    resid_MINT_file <- file.path(insample.folder, "DETS", paste("residuals_MINT_", idseries, "_", "DETS", "_", 1, ".Rdata", sep = "")) 
   }
+  load(resid_MINT_file)
   
-  mat_residuals <- sapply(seq_along(set_series), function(j){
-    if(j%%100 == 0)
-      print(j)
-    
-    idseries <- set_series[j]
-    if(algo == "KD-IC-NML"){
-      resid_MINT_file <- file.path(insample.folder, algo, paste("residuals_MINT_", idseries, "_", algo, ".Rdata", sep = "")) 
-      load(resid_MINT_file) # residuals_MINT
-      e_vec <- c(rep(NA, n_past_obs_kd), residuals_MINT)
-    }else if(algo == "DYNREG" || algo == "DETS"){
-      resid_MINT_file <- file.path(insample.folder, algo, paste("residuals_MINT_", idseries, "_", algo, "_", 1, ".Rdata", sep = "")) 
-      load(resid_MINT_file)
-      e_vec <- residuals_MINT
-    }
-    e_vec
-  })
-  print(dim(mat_residuals))
-  mat_residuals <- tail(mat_residuals, -n_past_obs_kd)
-  if(do.agg){
-    R_onestep[, seq(n_agg)] <- mat_residuals
+  if(filekd){
+    e_vec <- c(rep(NA, n_past_obs_kd), residuals_MINT)
   }else{
-    R_onestep[, seq(n_agg + 1, n_total)] <- mat_residuals
+    e_vec <- residuals_MINT
   }
-}
+  e_vec
+})
+R_onestep <- tail(mat_residuals, -n_past_obs_kd)
 
 data_test$Eresiduals <- R_onestep
+
+# Tv <- ncol(data_valid$Yhat[1, , ])
+# weights_glmnet <- rep(1/apply(R_onestep^2, 2, mean), each = Tv)
+
 
 source("config_paths.R")
 file_bf <- file.path(bf.folder, 

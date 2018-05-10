@@ -3,7 +3,7 @@ assign("last.warning", NULL, envir = baseenv())
 source("config_paths.R")
 source("packages.R")
 source("bights.R")
-source("methods.R")
+source("methods_meters.R") ##############
 source("simulate.R")
 source("simulate_large.R")
 source("utils.R")
@@ -13,7 +13,27 @@ library(methods)
 library(doMC)
 library(gglasso)
 
+set.seed(1986)
+
 source("../../PROJ/code/config_general.R")
+source(file.path("/home/rstudio/PROJ/code", "config_splitting.R"))
+
+#load(file.path(file.path("/home/rstudio/PROJ", "work"), "myinfo.Rdata"))
+sparsehts.work.folder <- file.path("/home/rstudio/sparseHTS", "work")
+load(file.path(sparsehts.work.folder, "myinfo.Rdata"))
+
+
+
+lambda_selection <- "1se"
+#lambda_selection <- "min"
+experiment <- "meters"
+H <- 2
+mc.cores.methods <- 5 #10 # mc.cores.basef  AND mc.cores.methods
+nb.cores.cv <- 3
+sameP_allhorizons <- FALSE
+
+file_bf <- file.path(bf.folder,  paste("bf_", experiment, ".Rdata", sep = ""))  
+load(file_bf)
 
 #######
 #name_methods <- c("L1-PBU", "L1", "BU", "MINTols", "MINTshr", "BASE","BASE2", 
@@ -23,30 +43,17 @@ source("../../PROJ/code/config_general.R")
 
 #name_methods <- c("L1-PBU", "BU", "MINTshr", "MINTols", "BASE2")
 #name_methods <- c("L1-PBU", "BU", "MINTshr", "MINTols", "BASE2")
-name_methods <- c("L1-PBU", "BU", "MINTols", "MINTshr", "BASE","BASE2", "L2-PBU", "L1", "L2")
+name_methods <- c("L1-PBU", "BU", "MINTols", "MINTshr", "BASE","BASE2", "L2-PBU", "L1-POLS")
+name_methods <- c("NEW", "L1-PBU", "BU", "MINTshr", "BASE2", "L1-POLS")
 nb_methods <- length(name_methods)
 #######
 
 #config_main <- list(intercept = FALSE, standardize = FALSE, alpha = .98, thresh = 10^-6, nlambda = 50)
-config_main <- list(intercept = FALSE, standardize = FALSE, alpha = 1, thresh = 10^-6, nlambda = 50)
+#config_main <- list(intercept = FALSE, standardize = FALSE, alpha = 1, thresh = 10^-6, nlambda = 50, weights = weights_glmnet)
+config_main <- list(intercept = FALSE, standardize = FALSE, alpha = 1, thresh = 10^-6, nlambda = 100)
 config_cvglmnet <- c(config_main, list(nfolds = 3))
 
-lambda_selection <- "1se"
-#lambda_selection <- "min"
-experiment <- "meters"
-H <- 5
 
-mc.cores.methods <- 5 #10 # mc.cores.basef  AND mc.cores.methods
-nb.cores.cv <- 3
-
-sameP_allhorizons <- FALSE
-
-
-#load(file.path(file.path("/home/rstudio/PROJ", "work"), "myinfo.Rdata"))
-sparsehts.work.folder <- file.path("/home/rstudio/sparseHTS", "work")
-load(file.path(sparsehts.work.folder, "myinfo.Rdata"))
-
-source(file.path("/home/rstudio/PROJ/code", "config_splitting.R"))
 
 
 A <- Sagg
@@ -57,8 +64,7 @@ info_file <- file.path(results.folder, paste("info_", experiment, "_", lambda_se
 #save(file = info_file, list = c("name_methods", "A"))
 save(file = info_file, list = c("A"))
   
-  file_bf <- file.path(bf.folder, 
-                       paste("bf_", experiment, ".Rdata", sep = ""))  
+  file_bf <- file.path(bf.folder,  paste("bf_", experiment, ".Rdata", sep = ""))  
   load(file_bf)
   
   ### valid
@@ -135,10 +141,20 @@ save(file = info_file, list = c("A"))
         obj_learn <- mint(my_bights, method = cov_method, e_residuals = e_residuals , h = h) # J U and W
       }else if(current_method == "OLS"){
         obj_learn <- ols(objreg_valid, my_bights) 
+      }else if(current_method == "NEW"){
+        #obj_method <- list(algo = "NEW", lambda1 = 0.2, Ptowards = pbu(my_bights), config = config, selection = lambda_selection)
+        #obj_method <- list(algo = "NEW", lambda1 = 0, Ptowards = pbu(my_bights), config = config, selection = lambda_selection)
+        #obj_method <- list(algo = "NEW", set_lambda1 = c(0, 0.0001, 0.001, 0.01, 0.02, 0.05, 0.09, 0.1), Ptowards = pbu(my_bights), config = config, selection = lambda_selection)
+        #obj_method <- list(algo = "NEW", set_lambda1 = c(0.1, 0.2, 0.3, 0.4, 1, 2, 3), Ptowards = pbu(my_bights), config = config, selection = lambda_selection)
+        obj_method <- list(algo = "NEW", set_lambda1 = c(1, 2, 3, 5, 6, 10), Ptowards = pbu(my_bights), config = config, selection = lambda_selection)
+        
       }else if(current_method == "L1"){
         obj_method <- list(algo = "LASSO", Ptowards = NULL, config = config, selection = lambda_selection)
       }else if(current_method == "L1-PBU"){
         obj_method <- list(algo = "LASSO", Ptowards = pbu(my_bights), config = config, selection = lambda_selection)
+      }else if(current_method == "L1-POLS"){
+        pols <- solve(t(my_bights$S) %*% my_bights$S) %*% t(my_bights$S)
+        obj_method <- list(algo = "LASSO", Ptowards = pols, config = config, selection = lambda_selection)
       }else if(current_method == "L2" || current_method == "L2-PBU"){
         config_ridge <- config
         config_ridge$glmnet$alpha <- 0
@@ -178,7 +194,6 @@ save(file = info_file, list = c("A"))
     results_allh[[h]] <- results
     
   } # HORIZON
-  
   
   myfile <- file.path(results.folder, paste("results_", experiment, "_", lambda_selection, ".Rdata", sep = ""))
   save(file = myfile, list = c("results_allh", "Y_test_allh"))

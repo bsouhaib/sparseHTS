@@ -52,26 +52,124 @@ new_learnreg <- function(objreg, objhts, objmethod, standardizeX = TRUE, centerY
   config <- objmethod$config
   model <- NULL
   s <- NULL
-  if(algo == "LASSO" || algo == "gOLS"){
-    model <- do.call(glmnet, c(list(x = X, y = y), config$glmnet)) 
-    if(algo == "gOLS"){
-      s <- 0
-    }else if(algo == "LASSO"){
+  if(algo == "LASSO" || algo == "NEW"){
+    #model <- do.call(glmnet, c(list(x = X, y = y), config$glmnet)) 
+    if(algo == "LASSO" || algo == "NEW"){
       #mylambdas <- c(model$lambda, seq(tail(model$lambda, 1), 0,length.out = 10))
-      mylambdas <- model$lambda
+      #mylambdas <- model$lambda
       
-      do.parallel <- FALSE
-      if(nb.cores.cv > 1){
-        do.parallel <- TRUE
-        registerDoMC(cores = nb.cores.cv)
+      if(algo == "NEW"){
+        n_before <- nrow(X)
+      
+        set_lambda1 <- objmethod$set_lambda1
+        #err_lambda1 <- vector("list", length(set_lambda1))
+        min_err <- Inf
+        for(ilambda1 in seq_along(set_lambda1) ){  
+        
+            lambda1 <- set_lambda1[[ilambda1]]
+          
+        Xbis <- sqrt(lambda1) * kronecker(objhts$A, diag(objhts$nts))
+        X_augm <- rbind(X, Xbis)
+        n_after <- nrow(X_augm)
+        
+        k <- objhts$nts - objhts$nbts
+        P_constraint <- Matrix(0, nrow = k, ncol = objhts$nts, sparse = T)
+        P_constraint[cbind(seq(k), seq(k)) ] <- 1
+        
+        if(!is.null(objmethod$Ptowards)){
+          P_constraint <- P_constraint - objhts$A %*% objmethod$Ptowards
+        }
+        P_constraint <- t(P_constraint)
+        
+        ybis <-  sqrt(lambda1) * fct_vec(P_constraint)
+        y_augm <- rbind(y, ybis)
+        
+        model <- do.call(glmnet, c(list(x = X_augm, y = y_augm), config$glmnet)) 
+        foldid <- config$cvglmnet$foldid
+        folds <- unique(foldid)
+        foldbinary <- sapply(seq_along(folds), function(ifold){
+          fold <- folds[ifold]
+          id <- which(foldid == fold)
+          vec <- numeric(length(y))
+          vec[id] <- 1
+          vec[seq(n_before + 1, n_after)] <- 1
+          vec
+        })
+        nfolds <- ncol(foldbinary)
+        lambdas <- model$lambda
+        #err_folds <- array(NA, c(n_before, length(lambdas)) )
+        err_folds <- vector("list", nfolds)
+        
+        for(j in seq(nfolds)){
+          idtrain <- which(foldbinary[, j] == 1)
+          idvalid <- which(foldbinary[, j] == 0)
+          model_cv <- do.call(glmnet, c(list(x = X_augm[idtrain, ], y = y_augm[idtrain, ]), config$glmnet, list(lambda = lambdas))) 
+          pred <- predict(model_cv, X_augm[idvalid, ])
+          #err_folds[idvalid, ]  <-  (pred - y[idvalid, ])^2
+          err_folds[[j]] <- (pred - y_augm[idvalid, ])^2
+        }
+        #err_lambda1[[ilambda1]] <- err_folds
+        
+        res  <- t(sapply(err_folds, function(mat){
+          apply(mat, 2, mean)
+        }))
+        err_lambdas2 <- apply(res, 2, mean)
+        local_err <- min(err_lambdas2)
+        
+        print(local_err)
+        
+        if(local_err < min_err){
+          min_err <- local_err
+          model_save <- model
+          lambda1_min <- lambda1
+          err_folds_save <- err_folds
+        }
+          
       }
-      model <- do.call(cv.glmnet, 
-                       c(list(x = X, y = y), 
-                         config$cvglmnet , 
-                         list(lambda = mylambdas), 
-                         list(parallel = do.parallel)))
-      s <- ifelse(objmethod$selection == "min", "lambda.min", "lambda.1se")
+ 
+        err_folds <- err_folds_save
+        #err_cv <- apply(err_folds, 2, mean)
+        res_cv <- t(sapply(seq(length(lambdas)), function(ilambda){ 
+          cv_mean_eachfold <- sapply(err_folds, function(mat){
+            mean(mat[, ilambda])
+          })  
+          cv_sd <- sd(cv_mean_eachfold)/sqrt(nfolds)
+          cv_mean <- mean(cv_mean_eachfold)
+          list(cv_mean = cv_mean, cv_sdplus = cv_mean + cv_sd, cv_sdminus = cv_mean - cv_sd)
+        }))
+        # matplot(res_cv)
+        
+        cv_mean <- unlist(res_cv[, "cv_mean"])
+        if(objmethod$selection == "1se"){
+          cv_sdplus <- res_cv[, "cv_sdplus"]
+          i <- which.min(cv_mean)
+          lambda_min <- lambdas[which.min(cv_mean)]
+          set_lambdas <- lambdas[which(cv_mean <= cv_sdplus[i] & lambdas > lambda_min)]
+          stopifnot(length(set_lambdas)>0)
+          s <- max(set_lambdas)
+        }else if(objmethod$selection == "min"){
+          s <- lambdas[which.min(cv_mean)]
+        }else{
+          stop("error in lambda selection !")
+        }
+        
+        #browser()
+        
+      }else{
       
+        do.parallel <- FALSE
+        if(nb.cores.cv > 1){
+          do.parallel <- TRUE
+          registerDoMC(cores = nb.cores.cv)
+        }
+        model <- do.call(cv.glmnet, 
+                         c(list(x = X, y = y), 
+                           config$cvglmnet ,
+                           list(parallel = do.parallel)))
+        s <- ifelse(objmethod$selection == "min", "lambda.min", "lambda.1se")
+        #browser()
+        #browser()
+      }
     }
   }else if(algo == "GGLASSO"){
     group1 <- rep(seq(objhts$nts), objhts$nbts)
@@ -90,7 +188,7 @@ new_predtest <- function(objreg, objhts, objlearn = NULL){
   algo <- objmethod$algo
   
   
-  if(algo == "LASSO" || algo == "gOLS" || algo == "GGLASSO"){  
+  if(algo == "LASSO" || algo == "NEW" || algo == "GGLASSO"){  
     Yhat <- objreg$Yhat
     standardizeX <- objlearn$standardizeX
     centerY      <- objlearn$centerY
@@ -113,10 +211,12 @@ new_predtest <- function(objreg, objhts, objlearn = NULL){
     }
     
     Ytilde_test <- fct_inv_vec(vec_ytile_test, 
-                nrows = nrow(Yhat), ncolumns = ncol(Yhat)) 
+                               nrows = nrow(Yhat), ncolumns = ncol(Yhat)) 
     if(centerY){
       Ytilde_test <- t((t(Ytilde_test) + scaling_info$mu_Y))
     }
+    
+    
     
     if(!is.null(objmethod$Ptowards)){
       Ytilde_test <- Ytilde_test + 
@@ -132,16 +232,16 @@ new_predtest <- function(objreg, objhts, objlearn = NULL){
     #}else{
     #  Ytilde_test <- Ytilde_uncentered_test
     #}
-
+    
   }else if(algo %in% c("BU", "MINT", "OLS") ){
     Ytilde_test <-  objreg$Yhat %*% t(objlearn$P) %*% t(objhts$S)
   }else if(algo %in% c("OLSS")){
-      Yhat <- objreg$Yhat
-      scaling_info <- objlearn$scaling_info
-      Yhat_scaled <- t((t(Yhat) - scaling_info$mu_Yhat)/scaling_info$sd_Yhat)
-      Ytilde_centered_test <-  Yhat_scaled %*% t(objlearn$P) %*% t(objhts$S)
-      Ytilde_uncentered_test <- t((t(Ytilde_centered_test) + scaling_info$mu_Y))
-      Ytilde_test <- Ytilde_uncentered_test
+    Yhat <- objreg$Yhat
+    scaling_info <- objlearn$scaling_info
+    Yhat_scaled <- t((t(Yhat) - scaling_info$mu_Yhat)/scaling_info$sd_Yhat)
+    Ytilde_centered_test <-  Yhat_scaled %*% t(objlearn$P) %*% t(objhts$S)
+    Ytilde_uncentered_test <- t((t(Ytilde_centered_test) + scaling_info$mu_Y))
+    Ytilde_test <- Ytilde_uncentered_test
   }else{
     stop("ERROR IN METHOD'S NAME")
   }
@@ -183,13 +283,13 @@ mint <- function(objhts, method = NULL, e_residuals = NULL, h = NULL){
   J <- Matrix(cbind(matrix(0, nrow = objhts$nbts, ncol = objhts$nts - objhts$nbts), diag(objhts$nbts)), sparse = TRUE)
   U <- Matrix(rbind(diag(objhts$nts - objhts$nbts), -t(objhts$A)), sparse = TRUE)
   P_BU <- cbind(matrix(0, objhts$nbts, objhts$nts - objhts$nbts), diag(objhts$nbts)) 
-
+  
   if(is.null(h)){
     h <- 1  
   }
   
   if(!is.null(e_residuals))
-  R1 <- e_residuals
+    R1 <- e_residuals
   
   if(is.null(method))
     method <- "diagonal"
@@ -212,7 +312,7 @@ mint <- function(objhts, method = NULL, e_residuals = NULL, h = NULL){
       stop("MinT needs covariance matrix to be positive definite.", call. = FALSE)
     }
   }
- 
+  
   MAT1 <- W %*% U
   MAT2 <- crossprod(U,MAT1)
   MAT3 <- tcrossprod(solve(MAT2), U)
