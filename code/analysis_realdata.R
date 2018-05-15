@@ -49,11 +49,13 @@ load(info_file)
     
 errors_all <- errors
 
-stop("done")
 
-apply(apply(errors_all[[1]], c(1, 3), sum), 2, mean)
-apply(apply(errors_all[[1]][, seq(17), ], c(1, 3), sum), 2, mean)
-apply(apply(errors_all[[1]][, seq(18, 55), ], c(1, 3), sum), 2, mean)
+
+print(apply(apply(errors_all[[1]], c(1, 3), sum), 2, mean))
+print(apply(apply(errors_all[[1]][, seq(17), ], c(1, 3), sum), 2, mean))
+print(apply(apply(errors_all[[1]][, seq(18, 55), ], c(1, 3), sum), 2, mean))
+
+stop("done")
 
 s <- apply(errors_all[[1]], c(1, 3), sum)
 matplot(s[, c(1, 4)], type = 'l', col = c("red", "purple"))
@@ -115,10 +117,10 @@ dev.off()
 
 stop("done")
 #######
+h <- 1
 results <- results_allh[[1]]
 #MAT <- results[[1]]$predictions
-
-FUTURE <-t(Y_test_allh[h, , ])
+FUTURE <-t(Y_test_allh[1, , ])
 v <- sapply(seq_along(results), function(imethod){results[[imethod]]$predictions}, simplify = "array")
 for(j in seq(20, 100)){
   matplot(cbind(v[, j, c(1, 2, 3, 5)], FUTURE[, j]), col = c("darkblue", "red", "purple", "cyan", "black"), type = 'l', lty = 1)

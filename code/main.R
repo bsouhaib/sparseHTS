@@ -3,9 +3,9 @@ assign("last.warning", NULL, envir = baseenv())
 args = (commandArgs(TRUE))
 if(length(args) == 0){
   
-  experiment <- "small-unbiased"
+  experiment <- "small-biased"
   idjob <- 1
-  nb_simulations <- 10
+  ids_simulations <- 1 # seq(2, 100)
   lambda_selection <- "1se"
 }else{
   
@@ -15,12 +15,9 @@ if(length(args) == 0){
   
   experiment <- args[[1]]
   idjob <- as.numeric(args[[2]])
-  nb_simulations <- as.numeric(args[[3]])
+  ids_simulations <- as.numeric(args[[3]])
   lambda_selection <- args[[4]]
 }
-
-#set.seed(6120)
-set.seed(idjob)
 
 stopifnot(lambda_selection %in% c("min", "1se"))
 
@@ -43,16 +40,20 @@ DGP <- res_experiment[1]
 add.bias <- (res_experiment[2] == "biased")
 
 #######
-name_methods <- c("BU", "MINTols", "MINTshr", "BASE","BASE2", 
-                  "L1", "L2",  "L1-PBU", "L2-PBU", "G-L1-PBU")
+name_methods <- c("BU", "MINTols", "MINTshr", "BASE","BASE2",  "L1-PBU", "L2-PBU")
+if(DGP == "small"){
+  name_methods <- c(name_methods,"L1", "L2", "G-L1-PBU")
+}
 if(DGP != "large"){
-  name_methods <- c(name_methods, "MINTsam", "OLS")
+  name_methods <- c(name_methods, "MINTsam", "ERM")
 }
 nb_methods <- length(name_methods)
 # "NAIVE", "AVG", 
 #######
+print(name_methods)
 
-config_main <- list(intercept = FALSE, standardize = FALSE, alpha = .98, thresh = 10^-6, nlambda = 50)
+sameP_allhorizons <- TRUE
+config_main <- list(intercept = FALSE, standardize = FALSE, alpha = 1, thresh = 10^-6, nlambda = 50)
 config_cvglmnet <- c(config_main, list(nfolds = 3))
 
 config_forecast <- list(fit_fct = auto.arima, forecast_fct = Arima, 
@@ -62,13 +63,11 @@ config_forecast <- list(fit_fct = auto.arima, forecast_fct = Arima,
 config_forecast_agg <- config_forecast_bot <- config_forecast
 
 mc.cores.basef <- 10
-mc.cores.methods <- 10 # mc.cores.basef  AND mc.cores.methods
+mc.cores.methods <- 1 #10 # mc.cores.basef  AND mc.cores.methods
 nb.cores.cv <- 3
-
-H <- 3
+H <- 5
 do.save <- TRUE
 refit_step <- 40
-sameP_allhorizons <- TRUE
 T_learn <- 600
 T_train <- floor((2 * T_learn)/3)
 T_valid <- T_learn - T_train
@@ -77,7 +76,10 @@ T_all <- T_train + T_valid + T_test
 n_warm <- 300
 n_simul <- n_warm + T_all
 
-for(i in seq(nb_simulations)){
+for(i in ids_simulations){
+  
+  set.seed(idjob + i)
+  
   
   print(paste(i, " - Start ALL -", base::date(), sep = ""))
 
@@ -119,18 +121,20 @@ for(i in seq(nb_simulations)){
   my_bights <- bights(bts, A)
  
   if(i == 1){
-    info_file <- file.path(results.folder, paste("info_", experiment, "_",
+    info_file <- file.path(results.folder, paste("info_", DGP, "_",
                                                  idjob, "_", lambda_selection, ".Rdata", sep = ""))
     #save(file = info_file, list = c("name_methods", "A"))
     save(file = info_file, list = c("A"))
   }
+  
+  #stop("done")
   
   print(paste(" m = ", my_bights$nbts, " - n = ", my_bights$nts, sep = ""))
   print(paste("Tvalid = ", T_valid, sep = ""))
   print(paste("N = ", my_bights$nts * T_valid, " - p = ", my_bights$nbts * my_bights$nts, sep = ""))
 
   file_bf <- file.path(bf.folder, 
-              paste("bf_", experiment, "_", idjob, ".", i, "_", refit_step, ".Rdata", sep = ""))  
+              paste("bf_", DGP, "_", idjob, ".", i, "_", refit_step, ".Rdata", sep = ""))  
   
   if(do.save && file.exists(file_bf)){
     load(file_bf)
@@ -189,17 +193,19 @@ if(add.bias){
   bias_mu <- c(bias_mu_agg, bias_mu_bottom)
   bias_sd <- c(bias_sd_agg, bias_sd_bottom)
 
-  nvalid <- ncol(Yhat_valid_allh[1, , ])
-  MYBIAS_valid <- t(sapply(seq(my_bights$nts), function(j){ 
-    rnorm(nvalid, mean = bias_mu[j], sd = bias_sd[j])
-  }))
-  Yhat_valid_allh[1, , ]  <- Yhat_valid_allh[1, , ]  + MYBIAS_valid
-  
-  ntest <- ncol(Yhat_test_allh[1, , ])
-  MYBIAS_test <- t(sapply(seq(my_bights$nts), function(j){ 
-    rnorm(ntest, mean = bias_mu[j], sd = bias_sd[j])
-  }))
-  Yhat_test_allh[1, , ] <- Yhat_test_allh[1, , ] + MYBIAS_test  
+  for(h in seq(H)){
+    nvalid <- ncol(Yhat_valid_allh[h, , ])
+    MYBIAS_valid <- t(sapply(seq(my_bights$nts), function(j){ 
+      rnorm(nvalid, mean = bias_mu[j], sd = bias_sd[j])
+    }))
+    Yhat_valid_allh[h, , ]  <- Yhat_valid_allh[h, , ]  + MYBIAS_valid
+    
+    ntest <- ncol(Yhat_test_allh[1, , ])
+    MYBIAS_test <- t(sapply(seq(my_bights$nts), function(j){ 
+      rnorm(ntest, mean = bias_mu[j], sd = bias_sd[j])
+    }))
+    Yhat_test_allh[h, , ] <- Yhat_test_allh[h, , ] + MYBIAS_test 
+  }
 }
   
   config_basic <- config_main
@@ -246,11 +252,11 @@ Ytilde_test_allh <- array(NA, c(dim(Yhat_test_allh), nb_methods) )
     foldid <- make_foldid(nValid, my_bights$nts, config$cvglmnet$nfolds)
     
     config$cvglmnet$foldid <- foldid
-    config$cvglmnet$nfolds <- NA
+    #config$cvglmnet$nfolds <- NA
     config_gglasso$foldid <- foldid
     
     results <- mclapply(name_methods, function(current_method){
-      #print(current_method)
+      #print(paste(base::date(), " - ", current_method, sep = ""))
       obj_method <- NULL
       if(current_method == "BU"){
         obj_learn <- bu(my_bights)
@@ -259,7 +265,7 @@ Ytilde_test_allh <- array(NA, c(dim(Yhat_test_allh), nb_methods) )
         cov_method <-  switch(wmethod, ols = "ols", shr = "shrink", sam = "sample", NA)
         e_residuals <- switch(wmethod, ols = NULL, shr = Eresiduals, sam = Eresiduals, NA)
         obj_learn <- mint(my_bights, method = cov_method, e_residuals = e_residuals , h = h) # J U and W
-      }else if(current_method == "OLS"){
+      }else if(current_method == "ERM"){
         obj_learn <- ols(objreg_valid, my_bights) 
       }else if(current_method == "L1"){
         obj_method <- list(algo = "LASSO", Ptowards = NULL, config = config, selection = lambda_selection)
@@ -284,7 +290,8 @@ Ytilde_test_allh <- array(NA, c(dim(Yhat_test_allh), nb_methods) )
         if(!sameP_allhorizons || (sameP_allhorizons && h == 1)){
           obj_learn <- new_learnreg(objreg_valid, my_bights, obj_method)
         }else{
-          obj_learn <- results[[current_method]]$obj_learn
+          #obj_learn <- results[[current_method]]$obj_learn
+          obj_learn <- results_h1[[current_method]]
         }
       }
       predictions <- NULL
@@ -296,10 +303,16 @@ Ytilde_test_allh <- array(NA, c(dim(Yhat_test_allh), nb_methods) )
     }, mc.cores = mc.cores.methods)
     names(results) <- name_methods
     
+    if(sameP_allhorizons && h == 1){
+      results_h1 <-  lapply(results , "[[", "obj_learn")
+    }
+    
     results[["BASE"]]   <- list(obj_learn = NULL, predictions = t(Yhat_test_allh[h, , ]))
     results[["BASE2"]]   <- list(obj_learn = NULL, predictions = t(save_Yhat_test_allh[h, , ]))
 
-    results_allh[[h]] <- results
+    # results_allh[[h]] <-  results ONLY NEED PREDICTIONS + SAVE SPACE
+    results_allh[[h]] <- lapply(results , "[[", "predictions")
+  
   
   } # HORIZON
 

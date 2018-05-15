@@ -22,12 +22,15 @@ source(file.path("/home/rstudio/PROJ/code", "config_splitting.R"))
 sparsehts.work.folder <- file.path("/home/rstudio/sparseHTS", "work")
 load(file.path(sparsehts.work.folder, "myinfo.Rdata"))
 
-
+add.bias <- FALSE
+if(add.bias){
+  print("BIAS IS ADDED !!!")
+}
 
 lambda_selection <- "1se"
 #lambda_selection <- "min"
 experiment <- "meters"
-H <- 2
+H <- 1
 mc.cores.methods <- 5 #10 # mc.cores.basef  AND mc.cores.methods
 nb.cores.cv <- 3
 sameP_allhorizons <- FALSE
@@ -43,8 +46,10 @@ load(file_bf)
 
 #name_methods <- c("L1-PBU", "BU", "MINTshr", "MINTols", "BASE2")
 #name_methods <- c("L1-PBU", "BU", "MINTshr", "MINTols", "BASE2")
-name_methods <- c("L1-PBU", "BU", "MINTols", "MINTshr", "BASE","BASE2", "L2-PBU", "L1-POLS")
-name_methods <- c("NEW", "L1-PBU", "BU", "MINTshr", "BASE2", "L1-POLS")
+#name_methods <- c("L1-PBU", "BU", "MINTols", "MINTshr", "BASE","BASE2", "L2-PBU", "L1-POLS")
+#name_methods <- c("NEW", "L1-PBU", "BU", "MINTshr", "BASE2", "L1-POLS")
+
+name_methods <- c("BU", "MINTshr", "MINTols",  "OLS", "NEW", "L1-PBU", "L1-POLS")
 nb_methods <- length(name_methods)
 #######
 
@@ -82,10 +87,30 @@ save(file = info_file, list = c("A"))
   
   save_Yhat_test_allh <- Yhat_test_allh
   
-  # 
-  #stop("HERE")
-  #data_valid$IN_y
-  #data_valid$IN_yhat
+  if(add.bias){
+    nbts <- my_bights$nbts
+    nts <- my_bights$nts
+    A <- my_bights$A
+    bias_mu_bottom <- rep(0.3, nbts); bias_sd_bottom <- rep(0.05, nbts) # error at ?
+    bias_mu_agg <- as.numeric(A %*% bias_mu_bottom)
+    bias_sd_agg <- as.numeric(A %*% bias_sd_bottom)
+    bias_mu <- c(bias_mu_agg, bias_mu_bottom)
+    bias_sd <- c(bias_sd_agg, bias_sd_bottom)
+    
+    nvalid <- ncol(Yhat_valid_allh[1, , ])
+    MYBIAS_valid <- t(sapply(seq(my_bights$nts), function(j){ 
+      rnorm(nvalid, mean = bias_mu[j], sd = bias_sd[j])
+    }))
+    Yhat_valid_allh[1, , ]  <- Yhat_valid_allh[1, , ]  + MYBIAS_valid
+    
+    ntest <- ncol(Yhat_test_allh[1, , ])
+    MYBIAS_test <- t(sapply(seq(my_bights$nts), function(j){ 
+      rnorm(ntest, mean = bias_mu[j], sd = bias_sd[j])
+    }))
+    Yhat_test_allh[1, , ] <- Yhat_test_allh[1, , ] + MYBIAS_test  
+  }
+  
+  
   
   config_basic <- config_main
   config <- list(glmnet = config_basic, cvglmnet = config_cvglmnet)

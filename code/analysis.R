@@ -1,7 +1,7 @@
 rm(list = ls())
 source("config_paths.R")
 source("nicefigs.R")
-
+library(plotrix)
 #######
 color_methods <- c("orange", "yellowgreen", "purple", "deeppink", "pink", "yellow",
                    "darkseagreen1", "darkblue", "darkgreen", "red", "cyan", "blue", "aquamarine", "darkseagreen1", "darkseagreen1", "darkseagreen1", "darkseagreen1", 
@@ -9,11 +9,11 @@ color_methods <- c("orange", "yellowgreen", "purple", "deeppink", "pink", "yello
 nb_methods <- length(color_methods)
 #######
 
-methods_toprint <- c("BU", "BASE", "BASE2", "MINTshr", "MINTols", "MINTsam",  "OLS", "L2-PBU", "L1-PBU", "G-L1-PBU")
+methods_toprint <- c("BU", "BASE", "BASE2", "MINTshr", "MINTols", "MINTsam",  "ERM", "L2-PBU", "L1-PBU", "G-L1-PBU")
 
 horizon_of_interest <- 1
-do.ratio <- TRUE
-tag <- "nips"
+do.ratio <- FALSE
+tag <- "NIPS"
 experiment <- "small-unbiased"
 id_jobs <- 1 # seq(2000, 2060) #1986 #seq(400, 450) #420 #seq(200, 210) #420 #c(200, 210)
 nb_simulations <- 10 #500
@@ -98,7 +98,12 @@ for(i in seq_along(groupings)){
 
   err_toplot <- t(v)
   
-  boxplot(err_toplot, outline = F, 
+  #mean_mse <- apply(err_toplot, 2, mean)
+  #std_mse <- apply(err_toplot, 2, std.error)
+  #plotCI(mean_mse, uiw = std_mse, liw = std_mse)
+  #browser()
+  
+  boxplot(err_toplot, outline = T, 
           main = paste("Total - ", nbfiles), cex = .5, col = color_methods[id.keep])
 }
 dev.off()
