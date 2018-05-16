@@ -1,8 +1,22 @@
 rm(list = ls())
 source("config_paths.R")
 source("nicefigs.R")
-
+library(plotrix)
 #######
+
+#experiment <- #"tourism" #"meters" #
+
+hierarchy_name <- "UKF13"
+hierarchy_name <- "UKF15"
+hierarchy_name <- "UKF16"
+hierarchy_name <- "UKF21"
+hierarchy_name <- "UKF23"
+
+# hierarchy_names <- c("UKF23", "UKF16", "UKF21", "UKF13", "UKF15")
+
+do.agg <- TRUE
+hselected <- seq(25)
+
 color_methods <- c("orange", "yellowgreen", "purple", "deeppink", "pink", "yellow",
                    "darkseagreen1", "darkblue", "darkgreen", "red", "cyan", "blue", "aquamarine", "darkseagreen1", "darkseagreen1", "darkseagreen1", "darkseagreen1", 
                    "slategray4", "slategray", "aquamarine")
@@ -16,17 +30,17 @@ methods_toprint <- c("BASE2", "BU", "MINTshr", "MINTols", "L2-PBU", "L1-PBU", "L
 
 horizon_of_interest <- 1
 do.ratio <- FALSE
-tag <- "nips_meters91"
-experiment <- "meters" #"tourism" #"meters" #
+tag <- "NIPS"
+
 lambda_selection <- "1se"
 #lambda_selection <- "min"
 
 
-info_file <- file.path(results.folder, paste("info_", experiment, "_", lambda_selection, ".Rdata", sep = ""))
+info_file <- file.path(results.folder, paste("info_", hierarchy_name, "_", lambda_selection, ".Rdata", sep = ""))
 load(info_file)
 
 
-    myfile <- file.path(results.folder, paste("results_", experiment, "_", lambda_selection, ".Rdata", sep = ""))
+    myfile <- file.path(results.folder, paste("results_", hierarchy_name, "_", lambda_selection, ".Rdata", sep = ""))
     if(!file.exists(myfile)){
      stop("FILE DOES NOT EXIST")
     }
@@ -37,7 +51,8 @@ load(info_file)
         FUTURE <-t(Y_test_allh[h, , ])
         
         res <- sapply(results_allh[[h]], function(results_method){
-          (results_method$predictions - FUTURE)^2
+          #(results_method$predictions - FUTURE)^2	
+	          (results_method - FUTURE)^2
         }, simplify = "array")
         #browser()
         #print(dim(res))
@@ -49,11 +64,66 @@ load(info_file)
     
 errors_all <- errors
 
+#errors_all[[1]]
+#print(apply(apply(errors_all[[1]], c(1, 3), sum), 2, mean))
+#print(apply(apply(errors_all[[1]][, seq(17), ], c(1, 3), sum), 2, mean))
+#print(apply(apply(errors_all[[1]][, seq(18, 55), ], c(1, 3), sum), 2, mean))
 
 
-print(apply(apply(errors_all[[1]], c(1, 3), sum), 2, mean))
-print(apply(apply(errors_all[[1]][, seq(17), ], c(1, 3), sum), 2, mean))
-print(apply(apply(errors_all[[1]][, seq(18, 55), ], c(1, 3), sum), 2, mean))
+name_methods <- dimnames(errors_all[[1]])[[3]]
+naggts <- nrow(A)
+nbts <- ncol(A)
+nts <- naggts + nbts
+
+myfile <- paste(tag, "_", hierarchy_name, "_", do.agg, sep = "")
+savepdf(file.path(pdf.folder, myfile), height = 26 * 0.9, width = 21 * 0.9)
+par(mfrow = c(4, 4))
+
+for(h in hselected){
+  
+  if(do.agg){
+    v <- errors_all[[h]][, seq(naggts), ]
+  }else{
+    v <- errors_all[[h]][, seq(naggts + 1, nts), ]
+  }
+
+u <- apply(v, c(1, 3), sum)
+mse_mean_h <- apply(u, 2, mean)
+mse_std_h <- apply(u, 2, std.error)
+
+plotCI(mse_mean_h, uiw = mse_std_h, liw = mse_std_h, main = paste("Horizon h = ", h, sep = ""), ylab = "MSE", xaxt = "n", xlab = "")
+axis(1, at = seq(length(mse_mean_h)) , labels = name_methods, col.axis="blue", las=2)
+}
+dev.off()
+
+myfile <- paste(tag, "_", hierarchy_name, "_", "FINAL", sep = "")
+savepdf(file.path(pdf.folder, myfile), height = 26 * 0.4, width = 21 * 0.9)
+par(mfrow = c(1, 2))
+
+#listhorizons <- list(night = seq(1, 12), day = seq(13, 48))
+listhorizons <- list(night = seq(1, 12), day = seq(13, max(hselected) ))
+
+#listgroups <- list(agg = seq(naggts) , bot = seq(naggts + 1, nts))
+#listgroups <- list(all = seq(nts), agg = seq(naggts) , bot = seq(naggts + 1, nts))
+listgroups <- list(all = seq(nts))
+
+for(ihgroup in seq_along(listhorizons)){
+  for(i in seq_along(listgroups)){
+    mygroup <- listgroups[[i]]
+    myhorizons <- listhorizons[[ihgroup]]
+  
+    m <- sapply(errors_all[hselected], function(v){ apply(v[, mygroup, ], c(1, 3), sum)   }, simplify = "array")
+    res <- apply(m[, , myhorizons], c(1, 2), mean) # avg horizon
+    mse_mean <- apply(res, 2, mean)
+    mse_std <- apply(res, 2, std.error)
+    plotCI(mse_mean, uiw = mse_std, liw = mse_std, ylab = "MSE", xaxt = "n", xlab = "")
+  
+    #mse_mean <- apply(m, 2, mean)
+    #mse_std <- apply(m, 2, std.error)
+    #plotCI(mse_mean, uiw = mse_std, liw = mse_std, ylab = "MSE", xaxt = "n", xlab = "")
+  }
+}
+dev.off()
 
 stop("done")
 
@@ -82,7 +152,7 @@ id.keep <- match(methods_toprint, dimnames(errors_final)[[2]])
 id.base <- match("BASE2", dimnames(errors_final)[[2]])
 
 
-myfile <- paste(tag, "_", ifelse(do.ratio, "ratio", "absolute"), "_", experiment, "_", lambda_selection, sep = "")
+myfile <- paste(tag, "_", ifelse(do.ratio, "ratio", "absolute"), "_", hierarchy_name, "_", lambda_selection, sep = "")
 savepdf(file.path(pdf.folder, myfile), height = 26 * 0.3)
 par(mfrow = c(1, 3))
 par(cex.axis=.4)

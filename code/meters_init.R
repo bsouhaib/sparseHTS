@@ -101,53 +101,62 @@ for(mynuts4 in c("UKF3004", "UKF3006")){
 }
 
 # Remove some branches in DEMO HIERARCHY
-x <- x %>% filter(DEMO2 != "D517", DEMO1 != "D2")
+DT <- x %>% filter(DEMO2 != "D517", DEMO1 != "D2")
+
 
 print("NEW SELECTION !!")
-stop("done")
+ 
+hierarchy_names <- c("UKF23", "UKF16", "UKF21", "UKF13", "UKF15")
 
-#x <- x[which(grepl("UKF23", x$NUTS4)), ]
-#x <- x[which(grepl("UKF1", x$NUTS4)), ]
-
-# Save myinfo.Rdata
-myinfoDT <- x
-
-#bottomSeries <- myinfoDT %>% .$IDMETER
-#n_bottom <- length(bottomSeries)
-
-myedges <- data.frame(rbind(cbind(myinfoDT$NUTS1, myinfoDT$NUTS2), cbind(myinfoDT$NUTS2, myinfoDT$NUTS3),
-                            cbind(myinfoDT$NUTS3, myinfoDT$NUTS4) ))
-
-#myedges <- data.frame(rbind(cbind(myinfoDT$NUTS3, myinfoDT$NUTS4), cbind(myinfoDT$NUTS4, myinfoDT$IDMETER)))
-
-#myedges <- data.frame(rbind(cbind(myinfoDT$NUTS2, myinfoDT$NUTS3), cbind(myinfoDT$NUTS3, myinfoDT$NUTS4), cbind(myinfoDT$NUTS4, myinfoDT$IDMETER)))
-
-itree <- graph.data.frame(myedges)
-itree <- simplify(itree, remove.loops = F)
-# plot(itree, layout = layout.reingold.tilford(itree, root=1, circular=T), vertex.label.cex = 0.4, vertex.size = 1, vertex.label.dist = .2)
-# MUCH BETTER: plot(itree, layout = layout.reingold.tilford(itree, root=1, circular=T), vertex.size=0, vertex.label=NA, edge.arrow.size=0)
-#browser()
-
-all.nodes.names <- V(itree)$name
-agg.nodes.names <- aggSeries <- all.nodes.names[which(degree(itree, V(itree), "out")!=0)]
-n_agg <- length(agg.nodes.names)
-
-bottom.nodes.names <- bottomSeries <- all.nodes.names[which(degree(itree, V(itree), "out")==0)]
-n_bottom <- length(bottom.nodes.names)
-
-Sagg <- matrix(0, nrow = n_agg, ncol = n_bottom)
-for(i in seq_along(agg.nodes.names)){
-  agg.node.name <- agg.nodes.names[i]
-  reachable <- which(shortest.paths(itree, agg.node.name, mode="out") != Inf)
-  terminal.nodes <- reachable[which(degree(itree, reachable, mode="out") == 0)]
-  #print(terminal.nodes)
-  terminal.nodes.names <- all.nodes.names[terminal.nodes]
-  ids <- match(terminal.nodes.names, bottomSeries)
-  stopifnot(all(!is.na(ids)))
-  Sagg[i, ids] <- 1
+for(hierarchy_name in hierarchy_names){
+  
+  x <- DT
+  print(x[which(grepl(hierarchy_name, x$NUTS4)), ] %>% count(NUTS4))
+  x <- x[which(grepl(hierarchy_name, x$NUTS4)), ]
+  print(dim(x))
+  
+  # Save myinfo.Rdata
+  myinfoDT <- x
+  
+  lname <- nchar(hierarchy_name)
+  if(lname == 3){
+    myedges <- data.frame(rbind(cbind(myinfoDT$NUTS1, myinfoDT$NUTS2), cbind(myinfoDT$NUTS2, myinfoDT$NUTS3),
+                                cbind(myinfoDT$NUTS3, myinfoDT$NUTS4) ))
+  }else if(lname == 4){
+    myedges <- data.frame(rbind(cbind(myinfoDT$NUTS2, myinfoDT$NUTS3), cbind(myinfoDT$NUTS3, myinfoDT$NUTS4), cbind(myinfoDT$NUTS4, myinfoDT$IDMETER)))
+  }else if(lname == 5){
+    myedges <- data.frame(rbind(cbind(myinfoDT$NUTS3, myinfoDT$NUTS4), cbind(myinfoDT$NUTS4, myinfoDT$IDMETER)))
+  }else{
+    stop("ERROR !!")
+  }
+  
+  
+  itree <- graph.data.frame(myedges)
+  itree <- simplify(itree, remove.loops = F)
+  # plot(itree, layout = layout.reingold.tilford(itree, root=1, circular=T), vertex.label.cex = 0.4, vertex.size = 1, vertex.label.dist = .2)
+  # MUCH BETTER: plot(itree, layout = layout.reingold.tilford(itree, root=1, circular=T), vertex.size=0, vertex.label=NA, edge.arrow.size=0)
+  #browser()
+  
+  all.nodes.names <- V(itree)$name
+  agg.nodes.names <- aggSeries <- all.nodes.names[which(degree(itree, V(itree), "out")!=0)]
+  n_agg <- length(agg.nodes.names)
+  
+  bottom.nodes.names <- bottomSeries <- all.nodes.names[which(degree(itree, V(itree), "out")==0)]
+  n_bottom <- length(bottom.nodes.names)
+  
+  Sagg <- matrix(0, nrow = n_agg, ncol = n_bottom)
+  for(i in seq_along(agg.nodes.names)){
+    agg.node.name <- agg.nodes.names[i]
+    reachable <- which(shortest.paths(itree, agg.node.name, mode="out") != Inf)
+    terminal.nodes <- reachable[which(degree(itree, reachable, mode="out") == 0)]
+    #print(terminal.nodes)
+    terminal.nodes.names <- all.nodes.names[terminal.nodes]
+    ids <- match(terminal.nodes.names, bottomSeries)
+    stopifnot(all(!is.na(ids)))
+    Sagg[i, ids] <- 1
+  }
+  
+  #file.remove(file.path(sparsehts.work.folder, "myinfo.Rdata"))
+  save(file = file.path(sparsehts.work.folder, paste("myinfo_", hierarchy_name,".Rdata", sep = "")) , list = c("bottomSeries", "itree", "Sagg", "aggSeries", "n_agg", "n_bottom"))
 }
-
-#file.remove(file.path(sparsehts.work.folder, "myinfo.Rdata"))
-save(file = file.path(sparsehts.work.folder, "myinfo.Rdata") , list = c("bottomSeries", "itree", "Sagg", "aggSeries", "n_agg", "n_bottom"))
-
 

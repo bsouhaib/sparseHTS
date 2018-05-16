@@ -1,5 +1,17 @@
 rm(list = ls())
 assign("last.warning", NULL, envir = baseenv())
+args = (commandArgs(TRUE))
+if(length(args) == 0){
+  # hierarchy_names <- c("UKF23", "UKF16", "UKF21", "UKF13", "UKF15")
+  hierarchy_name <- "UKF13"
+}else{
+  
+  for(i in 1:length(args)){
+    print(args[[i]])
+  }
+  
+  hierarchy_name <- args[[1]]
+}
 source("config_paths.R")
 source("packages.R")
 source("bights.R")
@@ -12,6 +24,13 @@ source("code.R")
 library(methods)
 library(doMC)
 library(gglasso)
+source("meters_utils.R")
+
+
+do.diff <- TRUE
+if(do.diff){
+  print("DIFF IS APPLIED !!!!!")
+}
 
 set.seed(1986)
 
@@ -20,7 +39,8 @@ source(file.path("/home/rstudio/PROJ/code", "config_splitting.R"))
 
 #load(file.path(file.path("/home/rstudio/PROJ", "work"), "myinfo.Rdata"))
 sparsehts.work.folder <- file.path("/home/rstudio/sparseHTS", "work")
-load(file.path(sparsehts.work.folder, "myinfo.Rdata"))
+load(file.path(sparsehts.work.folder, paste("myinfo_", hierarchy_name,".Rdata", sep = "")))
+
 
 add.bias <- FALSE
 if(add.bias){
@@ -29,13 +49,12 @@ if(add.bias){
 
 lambda_selection <- "1se"
 #lambda_selection <- "min"
-experiment <- "meters"
-H <- 1
-mc.cores.methods <- 5 #10 # mc.cores.basef  AND mc.cores.methods
+H <- 48
+mc.cores.methods <- 1 #10 # mc.cores.basef  AND mc.cores.methods
 nb.cores.cv <- 3
 sameP_allhorizons <- FALSE
 
-file_bf <- file.path(bf.folder,  paste("bf_", experiment, ".Rdata", sep = ""))  
+file_bf <- file.path(bf.folder,  paste("bf_", hierarchy_name, ".Rdata", sep = ""))  
 load(file_bf)
 
 #######
@@ -48,8 +67,9 @@ load(file_bf)
 #name_methods <- c("L1-PBU", "BU", "MINTshr", "MINTols", "BASE2")
 #name_methods <- c("L1-PBU", "BU", "MINTols", "MINTshr", "BASE","BASE2", "L2-PBU", "L1-POLS")
 #name_methods <- c("NEW", "L1-PBU", "BU", "MINTshr", "BASE2", "L1-POLS")
+#name_methods <- c("BU", "MINTshr", "MINTols",  "OLS", "NEW", "L1-PBU", "L1-POLS")
 
-name_methods <- c("BU", "MINTshr", "MINTols",  "OLS", "NEW", "L1-PBU", "L1-POLS")
+name_methods <- c("BU", "MINTshr", "MINTols",  "L1-PBU", "L1-POLS")
 nb_methods <- length(name_methods)
 #######
 
@@ -65,12 +85,15 @@ A <- Sagg
 bts <- matrix(NA, nrow = length(learn$id) + length(test$id), ncol = n_bottom)
 my_bights <- bights(bts, A)
 
-info_file <- file.path(results.folder, paste("info_", experiment, "_", lambda_selection, ".Rdata", sep = ""))
+print(my_bights$nbts)
+print(my_bights$nts)
+
+info_file <- file.path(results.folder, paste("info_", hierarchy_name, "_", lambda_selection, ".Rdata", sep = ""))
 #save(file = info_file, list = c("name_methods", "A"))
 save(file = info_file, list = c("A"))
   
-  file_bf <- file.path(bf.folder,  paste("bf_", experiment, ".Rdata", sep = ""))  
-  load(file_bf)
+#file_bf <- file.path(bf.folder,  paste("bf_", experiment, ".Rdata", sep = ""))  
+#load(file_bf)
   
   ### valid
   Yhat_valid_allh <- data_valid$Yhat
@@ -80,12 +103,26 @@ save(file = info_file, list = c("A"))
   Yhat_test_allh  <- data_test$Yhat
   Y_test_allh    <- data_test$Y
   
-
-  #Eresiduals <- data_test$Eresiduals
-  ids <- which(calendar$periodOfDay[tail(learn$id, - n_past_obs_kd)] == H)
-  Eresiduals <- data_test$Eresiduals[ids, ]
+  Eresiduals <- data_test$Eresiduals
   
   save_Yhat_test_allh <- Yhat_test_allh
+  
+  if(do.diff){
+    makediff <- function(myarray){
+      res <- sapply(seq(H), function(h){
+        apply(myarray[h, , ], 1, diff)
+      }, simplify = "array")
+      res <- aperm(res, c(3, 2, 1))
+    }
+    
+    Yhat_valid_allh  <- makediff(Yhat_valid_allh)
+    Y_valid_allh     <- makediff(Y_valid_allh)
+    Yhat_test_allh   <- makediff(Yhat_test_allh)
+    Y_test_allh      <- makediff(Y_test_allh)
+    save_Yhat_test_allh <- makediff(save_Yhat_test_allh)
+    
+    Eresiduals <- apply(Eresiduals, 2, diff, lag = 48)
+  }
   
   if(add.bias){
     nbts <- my_bights$nbts
@@ -128,8 +165,13 @@ save(file = info_file, list = c("A"))
   #  apply(my_bights$yts[vec[1]:vec[2], ], 2, mean)
   #}))
   
-  Ytilde_test_allh <- array(NA, c(dim(Yhat_test_allh), nb_methods) )
-  
+  if(do.diff){
+    alldim <- dim(Yhat_test_allh)
+    alldim[3] <- alldim[3] - 1
+    Ytilde_test_allh <- array(NA, c(alldim, nb_methods) )
+  }else{
+    Ytilde_test_allh <- array(NA, c(dim(Yhat_test_allh), nb_methods) )
+  }
   results_allh <- vector("list", H)
   for(h in seq(H)){
     print(paste("h = ", h, sep = ""))
@@ -137,6 +179,12 @@ save(file = info_file, list = c("A"))
     Yhat_valid_h <- t(Yhat_valid_allh[h, , ])
     Y_valid_h    <- t(Y_valid_allh[h, , ])
     Yhat_test_h  <- t(Yhat_test_allh[h, , ])
+    
+    
+    #stop("done")
+    #ids <- which(calendar$periodOfDay[tail(learn$id, - n_past_obs_kd)] == pday_touse(h))
+    #Eresiduals <- data_test$Eresiduals[ids, ]
+    #stop("done")
     
     objreg_valid <- list(y = makey(Y_valid_h), X = makeX(Yhat_valid_h, my_bights), Y = Y_valid_h, Yhat = Yhat_valid_h)
     objreg_test <- list(X = makeX(Yhat_test_h, my_bights), Yhat = Yhat_test_h)
@@ -199,7 +247,8 @@ save(file = info_file, list = c("A"))
         if(!sameP_allhorizons || (sameP_allhorizons && h == 1)){
           obj_learn <- new_learnreg(objreg_valid, my_bights, obj_method)
         }else{
-          obj_learn <- results[[current_method]]$obj_learn
+          #obj_learn <- results[[current_method]]$obj_learn
+          obj_learn <- results_h1[[current_method]]
         }
       }
       predictions <- NULL
@@ -213,14 +262,24 @@ save(file = info_file, list = c("A"))
     }, mc.cores = mc.cores.methods)
     names(results) <- name_methods
     
+    if(sameP_allhorizons && h == 1){
+      results_h1 <-  lapply(results , "[[", "obj_learn")
+    }
+    
     results[["BASE"]]   <- list(obj_learn = NULL, predictions = t(Yhat_test_allh[h, , ]))
     results[["BASE2"]]   <- list(obj_learn = NULL, predictions = t(save_Yhat_test_allh[h, , ]))
     
-    results_allh[[h]] <- results
+    # results_allh[[h]] <-  results ONLY NEED PREDICTIONS + SAVE SPACE
+    results_allh[[h]] <- lapply(results , "[[", "predictions")
+    
+    if(h%%5 == 0){
+      myfile <- file.path(results.folder, paste("results_", hierarchy_name, "_", lambda_selection, ".Rdata", sep = ""))
+      save(file = myfile, list = c("results_allh", "Y_test_allh"))
+    }
     
   } # HORIZON
   
-  myfile <- file.path(results.folder, paste("results_", experiment, "_", lambda_selection, ".Rdata", sep = ""))
+  myfile <- file.path(results.folder, paste("results_", hierarchy_name, "_", lambda_selection, ".Rdata", sep = ""))
   save(file = myfile, list = c("results_allh", "Y_test_allh"))
 
 
