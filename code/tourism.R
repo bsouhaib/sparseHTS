@@ -13,36 +13,31 @@ library(methods)
 library(doMC)
 library(gglasso)
 
+do.diff <- TRUE
+if(do.diff){
+  print("DO DIFF IS TRUE !!!!!!")
+}
 
-#######
-#name_methods <- c("L1-PBU", "L1", "BU", "MINTols", "MINTshr", "BASE","BASE2", 
-#                  "L2", "L2-PBU")
-#name_methods <- c("L1-PBU", "BU", "MINTols", "MINTshr", "BASE","BASE2", "L2-PBU")
-#, "G-L1-PBU"
-
-name_methods <- c("L1-PBU", "BU", "MINTshr", "MINTols", "BASE2")
+name_methods <- c("L1-PBU", "BU", "MINTshr", "MINTols")
 nb_methods <- length(name_methods)
 #######
 
-add.training <- TRUE
-
 #config_main <- list(intercept = FALSE, standardize = FALSE, alpha = .98, thresh = 10^-6, nlambda = 50)
 config_main <- list(intercept = FALSE, standardize = FALSE, alpha = 1, thresh = 10^-6, nlambda = 50)
-config_cvglmnet <- c(config_main, list(nfolds = 3))
+config_cvglmnet <- c(config_main, list(nfolds = 6))
 
 lambda_selection <- "1se"
 #lambda_selection <- "min"
 experiment <- "tourism"
-H <- 1
+H <- 12
 
 mc.cores.basef <- 30 # 20
-mc.cores.methods <- 5 #10 # mc.cores.basef  AND mc.cores.methods
-nb.cores.cv <- 3
+mc.cores.methods <- 4 #10 # mc.cores.basef  AND mc.cores.methods
+nb.cores.cv <- 6
 
 do.save <- TRUE
 refit_step <- 1
 sameP_allhorizons <- TRUE
-nb_simulations <- 1
 
 
 # CONSIDER ETS ????
@@ -55,18 +50,27 @@ config_forecast_agg <- config_forecast_bot <- config_forecast
 
 X <- read.csv("../data/Tourism data_v3.csv")
 Z <- X[, -seq(2)]
-vec <- colnames(Z)
+if(do.diff){
+  Z <- apply(Z, 2, diff, 12)
+}
 y <- gts(Z, characters = list(c(1, 1, 1), c(3)))
 S <- smatrix(y)
-ally <- allts(y)
+
+#vec <- colnames(Z)
+#
+#ally <- allts(y)
+#ally <- apply(ally, 2, diff, 12)
+
 bts <- Z
 bts <- ts(bts, c(1998, 1), freq = 12)
 A <- head(S, nrow(S) - ncol(Z))
 
+
+
 T_train <- 96 # 7
 T_valid <- 60 # 5
 T_learn <- T_train + T_valid
-T_test <- 72
+T_test <- 60
 T_all <- T_learn + T_test
 stopifnot(T_all == nrow(bts))
 
@@ -109,7 +113,7 @@ save(file = info_file, list = c("A"))
   Yhat_test_allh  <- data_test$Yhat
   Y_test_allh    <- data_test$Y
   Eresiduals <- data_test$Eresiduals
-  #stop("done")
+  ##stop("done")
   save_Yhat_test_allh <- Yhat_test_allh
   
   # 
@@ -143,32 +147,25 @@ save(file = info_file, list = c("A"))
     Y_valid_h    <- t(Y_valid_allh[h, , ])
     Yhat_test_h  <- t(Yhat_test_allh[h, , ])
     
-    
-    #if(add.training && h == 1){
-    #  Yhat_valid_h <- rbind(Yhat_valid_h, data_valid$IN_yhat)
-    #  Y_valid_h <- rbind(Y_valid_h, data_valid$IN_y)
-    #}
-    
     objreg_valid <- list(y = makey(Y_valid_h), X = makeX(Yhat_valid_h, my_bights), Y = Y_valid_h, Yhat = Yhat_valid_h, 
                          Yhat_intercept = cbind(Yhat_valid_h, rep(1, nrow(Yhat_valid_h)) ) )
     objreg_test <- list(X = makeX(Yhat_test_h, my_bights), Yhat = Yhat_test_h,
                         Yhat_intercept = cbind(Yhat_test_h, rep(1, nrow(Yhat_test_h)) ) )
-
     
+    #nValid <- nrow(Yhat_valid_h)
     #foldid <- rep(sample(seq(config$cvglmnet$nfolds), nValid, replace = T), my_bights$nts)
     #glmnet_config_local <- c(glmnet_config, list(foldid = foldid))
     #glmnet_config_local$nfolds <- NA
+    
     nValid <- nrow(Yhat_valid_h)
     foldid <- make_foldid(nValid, my_bights$nts, config$cvglmnet$nfolds)
     
     config$cvglmnet$foldid <- foldid
-    config$cvglmnet$nfolds <- NA
+    #config$cvglmnet$nfolds <- NA
     config_gglasso$foldid <- foldid
     
-    print("Starting methods")
-    
     results <- mclapply(name_methods, function(current_method){
-      #print(current_method)
+      #print(paste(base::date(), " - ", current_method, sep = ""))
       obj_method <- NULL
       if(current_method == "BU"){
         obj_learn <- bu(my_bights)
@@ -177,7 +174,7 @@ save(file = info_file, list = c("A"))
         cov_method <-  switch(wmethod, ols = "ols", shr = "shrink", sam = "sample", NA)
         e_residuals <- switch(wmethod, ols = NULL, shr = Eresiduals, sam = Eresiduals, NA)
         obj_learn <- mint(my_bights, method = cov_method, e_residuals = e_residuals , h = h) # J U and W
-      }else if(current_method == "OLS"){
+      }else if(current_method == "ERM"){
         obj_learn <- ols(objreg_valid, my_bights) 
       }else if(current_method == "L1"){
         obj_method <- list(algo = "LASSO", Ptowards = NULL, config = config, selection = lambda_selection)
@@ -202,7 +199,8 @@ save(file = info_file, list = c("A"))
         if(!sameP_allhorizons || (sameP_allhorizons && h == 1)){
           obj_learn <- new_learnreg(objreg_valid, my_bights, obj_method)
         }else{
-          obj_learn <- results[[current_method]]$obj_learn
+          #obj_learn <- results[[current_method]]$obj_learn
+          obj_learn <- results_h1[[current_method]]
         }
       }
       predictions <- NULL
@@ -210,18 +208,23 @@ save(file = info_file, list = c("A"))
         predictions <- new_predtest(objreg_test, my_bights, obj_learn)
       }
       
-      print(current_method)
-      
       list(obj_learn = obj_learn, predictions = predictions)
     }, mc.cores = mc.cores.methods)
     names(results) <- name_methods
     
+    if(sameP_allhorizons && h == 1){
+      results_h1 <-  lapply(results , "[[", "obj_learn")
+    }
+    
     results[["BASE"]]   <- list(obj_learn = NULL, predictions = t(Yhat_test_allh[h, , ]))
     results[["BASE2"]]   <- list(obj_learn = NULL, predictions = t(save_Yhat_test_allh[h, , ]))
     
-    results_allh[[h]] <- results
+    # results_allh[[h]] <-  results ONLY NEED PREDICTIONS + SAVE SPACE
+    results_allh[[h]] <- lapply(results , "[[", "predictions")
+    
     
   } # HORIZON
+  
   
   
   myfile <- file.path(results.folder, paste("results_", experiment, "_", lambda_selection, ".Rdata", sep = ""))

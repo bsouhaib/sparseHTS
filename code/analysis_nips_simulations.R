@@ -10,32 +10,45 @@ color_methods <- c("orange", "yellowgreen", "purple", "deeppink", "pink", "yello
 nb_methods <- length(color_methods)
 #######
 
-#methods_toprint <- c("BU", "BASE", "BASE2", "MINTshr", "MINTols", "MINTsam",  "ERM", "L2-PBU", "L1-PBU", "G-L1-PBU")
-#methods_toprint <- c("BU", "BASE", "BASE2", "MINTshr", "MINTols", "MINTsam",  "ERM", "L2-PBU", "L1-PBU", "L1", "L2")
 
-methods_toprint <- c("BU", "BASE", "BASE2", "MINTshr", "MINTols", "MINTsam",  "ERM", "L2-PBU", "L1-PBU")
-#methods_toprint <- c("BU", "BASE", "BASE2", "MINTshr", "MINTols", "ERM", "L2-PBU", "L1-PBU")
-
-
-do.ratio <- FALSE
-tag <- "NIPS"
+tag <- "SIM-NIPS"
 id_jobs <- 1 # seq(2000, 2060) #1986 #seq(400, 450) #420 #seq(200, 210) #420 #c(200, 210)
 
 #nb_simulations <- 100 #500
 # ids_simulations <- seq(nb_simulations) # 37
 
-ids_simulations <- seq(50)
+ids_simulations <- seq(100)
 
 lambda_selection <- "1se" # "min"
 
+do.file <- TRUE
 
-
-myfile <- paste(tag, "_", ifelse(do.ratio, "ratio", "absolute"), sep = "")
-savepdf(file.path(pdf.folder, myfile), height = 26 * 0.4, width = 21 * 0.9)
-par(mfrow = c(2, 4))
+if(do.file){
+myfile <- paste(tag, sep = "")
+savepdf(file.path(pdf.folder, myfile), height = 26 * 0.2, width = 21 * 0.9)
+par(mfrow = c(1, 4))
 par(cex.axis=.7)
+}
 
-for(experiment in c("small-unbiased", "small-biased", "large-unbiased", "large-biased")){
+#myexp <- c("small-unbiased", "small-biased", "large-unbiased", "large-biased")
+#myexp <- c("small-unbiased", "small-biased")
+myexp <- c("small-unbiased", "large-unbiased", "small-biased", "large-biased")
+for(experiment in myexp){
+  
+  if(experiment == "small-unbiased"){
+    methods_toprint <- c("BU", "BASE", "MINTshr", "MINTols", "MINTsam",  "ERM", "L1-PBU")
+    mymain <- "UNBIASED/SMALL"
+  }else if(experiment == "small-biased"){
+    methods_toprint <- c("BASE2", "BU", "BASE", "MINTshr", "MINTols", "MINTsam",  "ERM", "L1-PBU")
+    mymain <- "BIASED/SMALL"
+  }else if(experiment == "large-unbiased"){
+    methods_toprint <- c("BU", "BASE", "MINTshr", "MINTols", "L1-PBU")
+    mymain <- "UNBIASED/LARGE"
+  }else if(experiment == "large-biased"){
+    methods_toprint <- c("BASE2", "BU", "BASE", "MINTshr", "MINTols", "L1-PBU")
+    mymain <- "BIASED/LARGE"
+  }
+
 
   print(experiment)
   
@@ -70,11 +83,11 @@ for(idjob in id_jobs){
           #print(h)
           FUTURE <- t(Y_test_allh[h, , ])
           res <- sapply(results_allh[[h]], function(results_method){
-            if(DGP == "small"){
-              (results_method$predictions - FUTURE)^2
-            }else{
+            #if(DGP == "small"){
+            #  (results_method$predictions - FUTURE)^2
+            #}else{
               (results_method - FUTURE)^2
-            }
+            #}
             
             
           }, simplify = "array")
@@ -105,13 +118,16 @@ errors <- sapply(errors_all, function(errors_simulation){
 #which(apply(errors, c(2, 4), mean)[1, ] > 60)
 #browser()
 
-if(experiment == "small-unbiased"){
-  simulation_outliers <- c(49, 145)
+
+
+#plot(apply(errors, c(2, 4), mean)[1, ])
+#stop("done")
+print(sort(apply(errors, c(2, 4), mean)[1, ], index = T, decreasing = T))
+
+if(experiment == "small-biased"){
+  simulation_outliers <- c(10)
   errors <- errors[, , , -simulation_outliers]
 }
-#plot(apply(errors, c(2, 4), mean)[1, ])
-
-
 
 #v <- apply(res, c(1, 2, 3), mean)
 #err <- t(apply(v, c(2, 3), sum))
@@ -129,30 +145,32 @@ naggts <- nrow(A)
 nbts <- ncol(A)
 nts <- naggts + nbts
 #groupings <- list(all = rep(1, nts), agg = c(rep(1, naggts), rep(0, nbts)), bot = c(rep(0, naggts), rep(1, nbts)))
-groupings <- list(agg = c(rep(1, naggts), rep(0, nbts)), bot = c(rep(0, naggts), rep(1, nbts)))
+#groupings <- list(agg = c(rep(1, naggts), rep(0, nbts)), bot = c(rep(0, naggts), rep(1, nbts)))
+groupings <- list(all = rep(1, nts))
 
 
-for(h in 1){
+
   for(i in seq_along(groupings)){
     mygroup <- which(groupings[[i]] == 1)
     
     errors_grouping <- apply(errors[mygroup, , , ], c(2, 3, 4), sum)
+    errors_grouping <- apply(errors_grouping, c(1, 3), mean)
     
-    mse_mean <- t(apply(errors_grouping, c(1, 2), mean))
-    mse_sd   <- t(apply(errors_grouping, c(1, 2), std.error))
-    
-    mse_mean_h <- mse_mean[h, ]
-    mse_sd_h <- mse_sd[h, ]
+    mse_mean <- t(apply(errors_grouping, c(1), mean))
+    mse_std   <- t(apply(errors_grouping, c(1), std.error))
     
     
     #browser()
-    plotCI(mse_mean_h, uiw = mse_sd_h, liw = mse_sd_h, main = paste("Horizon h = ", h, sep = ""), ylab = "MSE", xaxt = "n", xlab = "")
-    axis(1, at = seq(length(mse_mean_h)) , labels = methods_toprint, col.axis="blue", las=2)
+    plotCI(mse_mean, uiw = mse_std, liw = mse_std, main = mymain, ylab = "MSE", xaxt = "n", xlab = "")
+    axis(1, at = seq(length(mse_mean)) , labels = methods_toprint, col.axis="blue", las=2)
     #browser()
     
     #boxplot(err_toplot, outline = T, main = paste("Total - ", nbfiles), cex = .5, col = color_methods[id.keep])
   }
-}
 
 }
+
+
+if(do.file){
 dev.off()
+}

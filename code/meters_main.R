@@ -58,18 +58,7 @@ file_bf <- file.path(bf.folder,  paste("bf_", hierarchy_name, ".Rdata", sep = ""
 load(file_bf)
 
 #######
-#name_methods <- c("L1-PBU", "L1", "BU", "MINTols", "MINTshr", "BASE","BASE2", 
-#                  "L2", "L2-PBU")
-#name_methods <- c("L1-PBU", "BU", "MINTols", "MINTshr", "BASE","BASE2", "L2-PBU")
-#, "G-L1-PBU"
-
-#name_methods <- c("L1-PBU", "BU", "MINTshr", "MINTols", "BASE2")
-#name_methods <- c("L1-PBU", "BU", "MINTshr", "MINTols", "BASE2")
-#name_methods <- c("L1-PBU", "BU", "MINTols", "MINTshr", "BASE","BASE2", "L2-PBU", "L1-POLS")
-#name_methods <- c("NEW", "L1-PBU", "BU", "MINTshr", "BASE2", "L1-POLS")
-#name_methods <- c("BU", "MINTshr", "MINTols",  "OLS", "NEW", "L1-PBU", "L1-POLS")
-
-name_methods <- c("BU", "MINTshr", "MINTols",  "L1-PBU", "L1-POLS")
+name_methods <- c("BU", "MINTshr", "MINTols",  "L1-PBU", "L1")
 nb_methods <- length(name_methods)
 #######
 
@@ -103,7 +92,7 @@ save(file = info_file, list = c("A"))
   Yhat_test_allh  <- data_test$Yhat
   Y_test_allh    <- data_test$Y
   
-  Eresiduals <- data_test$Eresiduals
+  Eresid <- data_test$Eresiduals
   
   save_Yhat_test_allh <- Yhat_test_allh
   
@@ -121,7 +110,9 @@ save(file = info_file, list = c("A"))
     Y_test_allh      <- makediff(Y_test_allh)
     save_Yhat_test_allh <- makediff(save_Yhat_test_allh)
     
-    Eresiduals <- apply(Eresiduals, 2, diff, lag = 48)
+    Eresid <- apply(Eresid, 2, diff, lag = 48)
+    pdays <- tail(calendar$periodOfDay[tail(learn$id, -n_past_obs_kd)], -48)
+    
   }
   
   if(add.bias){
@@ -175,6 +166,10 @@ save(file = info_file, list = c("A"))
   results_allh <- vector("list", H)
   for(h in seq(H)){
     print(paste("h = ", h, sep = ""))
+    
+    if(do.diff){
+      Eresiduals <- Eresid[which(pdays == h), ]
+    }
     
     Yhat_valid_h <- t(Yhat_valid_allh[h, , ])
     Y_valid_h    <- t(Y_valid_allh[h, , ])

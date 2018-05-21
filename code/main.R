@@ -3,7 +3,7 @@ assign("last.warning", NULL, envir = baseenv())
 args = (commandArgs(TRUE))
 if(length(args) == 0){
   
-  experiment <- "small-biased"
+  experiment <- "large-biased"
   idjob <- 1
   ids_simulations <- 1 # seq(2, 100)
   lambda_selection <- "1se"
@@ -40,15 +40,11 @@ DGP <- res_experiment[1]
 add.bias <- (res_experiment[2] == "biased")
 
 #######
-name_methods <- c("BU", "MINTols", "MINTshr", "BASE","BASE2",  "L1-PBU", "L2-PBU")
+name_methods <- c("BU", "MINTols", "MINTshr", "L1-PBU", "L1")
 if(DGP == "small"){
-  name_methods <- c(name_methods,"L1", "L2", "G-L1-PBU")
-}
-if(DGP != "large"){
   name_methods <- c(name_methods, "MINTsam", "ERM")
 }
 nb_methods <- length(name_methods)
-# "NAIVE", "AVG", 
 #######
 print(name_methods)
 
@@ -206,6 +202,12 @@ if(add.bias){
     }))
     Yhat_test_allh[h, , ] <- Yhat_test_allh[h, , ] + MYBIAS_test 
   }
+  
+  nresiduals <- nrow(Eresiduals)
+  MYBIAS_residuals <- sapply(seq(my_bights$nts), function(j){ 
+    rnorm(nresiduals, mean = bias_mu[j], sd = bias_sd[j])
+  })
+  Eresiduals <- Eresiduals - MYBIAS_residuals # - not + since (y - (yhat +b)) = (y - yhat) - b
 }
   
   config_basic <- config_main

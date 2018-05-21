@@ -15,7 +15,7 @@ hierarchy_name <- "UKF23"
 # hierarchy_names <- c("UKF23", "UKF16", "UKF21", "UKF13", "UKF15")
 
 do.agg <- TRUE
-hselected <- seq(25)
+hselected <- seq(48)
 
 color_methods <- c("orange", "yellowgreen", "purple", "deeppink", "pink", "yellow",
                    "darkseagreen1", "darkblue", "darkgreen", "red", "cyan", "blue", "aquamarine", "darkseagreen1", "darkseagreen1", "darkseagreen1", "darkseagreen1", 
