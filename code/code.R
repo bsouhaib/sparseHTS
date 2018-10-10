@@ -11,6 +11,7 @@ makeMatrices <- function(obj_bights, list_subsets, H, config_forecast_agg, confi
   #results <- lapply(seq(n), function(j){
   #  rolling.forecast(obj_bights$yts[, j], list_subsets, H, algos[j], refit_step = refit_step)
   #})
+  #print(mc.cores)
   
   results <- mclapply(seq(n), function(j){
     if(j <= n-m){
@@ -19,7 +20,7 @@ makeMatrices <- function(obj_bights, list_subsets, H, config_forecast_agg, confi
       config_forecast <- config_forecast_bot
     }
     rolling.forecast(obj_bights$yts[, j], list_subsets, H, config_forecast, refit_step = refit_step)
-  }, mc.cores = mc.cores.basef)
+  }, mc.cores = mc.cores)
   
   Yhat <- simplify2array(lapply(results, "[[", "predictions"))
   Y <- simplify2array(lapply(results, "[[", "future"))

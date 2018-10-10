@@ -13,12 +13,13 @@ library(methods)
 library(doMC)
 library(gglasso)
 
-do.diff <- TRUE
+do.diff <- FALSE
 if(do.diff){
   print("DO DIFF IS TRUE !!!!!!")
 }
 
-name_methods <- c("L1-PBU", "BU", "MINTshr", "MINTols")
+#name_methods <- c("L1-PBU", "BU", "MINTshr", "MINTols")
+name_methods <- c("L1-POLS", "BU", "MINTshr", "MINTols")
 nb_methods <- length(name_methods)
 #######
 
@@ -33,18 +34,33 @@ H <- 12
 
 mc.cores.basef <- 30 # 20
 mc.cores.methods <- 4 #10 # mc.cores.basef  AND mc.cores.methods
-nb.cores.cv <- 6
+nb.cores.cv <- 3
 
 do.save <- TRUE
-refit_step <- 1
+refit_step <- 12
 sameP_allhorizons <- TRUE
 
+do.adaptive <- TRUE
+add.bias <- FALSE
 
-# CONSIDER ETS ????
+#config_forecast <- list(fit_fct = auto.arima, forecast_fct = Arima, 
+#                        param_fit_fct = list(seasonal = TRUE, ic = "aic",  max.p = 2, max.q = 2,
+#                                             approximation = TRUE, stationary = FALSE, num.cores = 2), 
+#                        param_forecast_fct = list(use.initial.values = TRUE))
+
 config_forecast <- list(fit_fct = auto.arima, forecast_fct = Arima, 
-                        param_fit_fct = list(seasonal = TRUE, ic = "aic",  max.p = 2, max.q = 2,
+                        param_fit_fct = list(seasonal = TRUE, ic = "aic",  max.p = 1, max.q = 0, max.P = 1, max.Q = 0,
                                              approximation = TRUE, stationary = FALSE, num.cores = 2), 
                         param_forecast_fct = list(use.initial.values = TRUE))
+
+
+if(FALSE){
+  # CONSIDER ETS ????
+config_forecast <- list(fit_fct = ets, refit_fct = ets, 
+                        param_fit_fct = list(), 
+                        param_forecast_fct = list(use.initial.values = TRUE))
+}
+
 config_forecast_agg <- config_forecast_bot <- config_forecast
 
 
@@ -56,6 +72,8 @@ if(do.diff){
 y <- gts(Z, characters = list(c(1, 1, 1), c(3)))
 S <- smatrix(y)
 
+POLS <- solve(t(S) %*% S) %*% t(S)
+
 #vec <- colnames(Z)
 #
 #ally <- allts(y)
@@ -66,8 +84,7 @@ bts <- ts(bts, c(1998, 1), freq = 12)
 A <- head(S, nrow(S) - ncol(Z))
 
 
-
-T_train <- 96 # 7
+T_train <- 108 # 96 #7
 T_valid <- 60 # 5
 T_learn <- T_train + T_valid
 T_test <- 60
@@ -86,20 +103,22 @@ save(file = info_file, list = c("A"))
 
   file_bf <- file.path(bf.folder, 
                        paste("bf_", experiment, "_", refit_step, ".Rdata", sep = ""))  
-  
+ 
+   
   if(do.save && file.exists(file_bf)){
     load(file_bf)
+    print("loading")
   }else{
     ### valid
     list_subsets_valid <- lapply(seq(T_train, T_learn - H), function(i){c(i - T_train + 1, i)})
     data_valid <- makeMatrices(my_bights, list_subsets_valid, H = H, 
                                config_forecast_agg = config_forecast_agg, config_forecast_bot = config_forecast_bot, 
-                               refit_step = refit_step, mc.cores = mc.cores)
+                               refit_step = refit_step, mc.cores = mc.cores.basef)
     ### test
     list_subsets_test <- lapply(seq(T_learn, T_all - H), function(i){c(i - T_learn + 1, i)}) # I CHANGED it from T_TRAIN TO T_LEARN !!
     data_test <- makeMatrices(my_bights, list_subsets_test, H = H, 
                               config_forecast_agg = config_forecast_agg, config_forecast_bot = config_forecast_bot, 
-                              refit_step = refit_step, mc.cores = mc.cores)
+                              refit_step = refit_step, mc.cores = mc.cores.basef)
     if(do.save){
       save(file = file_bf, list = c("data_valid", "data_test", "list_subsets_valid", "list_subsets_test"))
     }
@@ -120,6 +139,11 @@ save(file = info_file, list = c("A"))
   #stop("HERE")
   #data_valid$IN_y
   #data_valid$IN_yhat
+  
+  weights_shrinkage <- rep(1, ncol(Eresiduals))
+  if(do.adaptive){
+    weights_shrinkage <- 1/apply(Eresiduals^2, 2, mean)
+  }
   
   config_basic <- config_main
   config <- list(glmnet = config_basic, cvglmnet = config_cvglmnet)
@@ -146,6 +170,27 @@ save(file = info_file, list = c("A"))
     Yhat_valid_h <- t(Yhat_valid_allh[h, , ])
     Y_valid_h    <- t(Y_valid_allh[h, , ])
     Yhat_test_h  <- t(Yhat_test_allh[h, , ])
+    
+    if(add.bias){
+      nbts <- my_bights$nbts
+      bias_mu_bottom <- rep(0.05, nbts); bias_sd_bottom <- rep(0.05, nbts) 
+      bias_mu_agg <- A %*% bias_mu_bottom
+      bias_sd_agg <- A %*% bias_sd_bottom
+      bias_mu <- c(bias_mu_agg, bias_mu_bottom)
+      bias_sd <- c(bias_sd_agg, bias_sd_bottom)
+      
+      nvalid <- ncol(Yhat_valid_allh[h, , ])
+      MYBIAS_valid <- t(sapply(seq(my_bights$nts), function(j){ 
+        rnorm(nvalid, mean = bias_mu[j], sd = bias_sd[j])
+      }))
+      Yhat_valid_allh[h, , ]  <- Yhat_valid_allh[h, , ]  + MYBIAS_valid
+      
+      ntest <- ncol(Yhat_test_allh[1, , ])
+      MYBIAS_test <- t(sapply(seq(my_bights$nts), function(j){ 
+        rnorm(ntest, mean = bias_mu[j], sd = bias_sd[j])
+      }))
+      Yhat_test_allh[h, , ] <- Yhat_test_allh[h, , ] + MYBIAS_test 
+    }
     
     objreg_valid <- list(y = makey(Y_valid_h), X = makeX(Yhat_valid_h, my_bights), Y = Y_valid_h, Yhat = Yhat_valid_h, 
                          Yhat_intercept = cbind(Yhat_valid_h, rep(1, nrow(Yhat_valid_h)) ) )
@@ -178,6 +223,8 @@ save(file = info_file, list = c("A"))
         obj_learn <- ols(objreg_valid, my_bights) 
       }else if(current_method == "L1"){
         obj_method <- list(algo = "LASSO", Ptowards = NULL, config = config, selection = lambda_selection)
+      }else if(current_method == "L1-POLS"){
+        obj_method <- list(algo = "LASSO", Ptowards = POLS, config = config, selection = lambda_selection)
       }else if(current_method == "L1-PBU"){
         obj_method <- list(algo = "LASSO", Ptowards = pbu(my_bights), config = config, selection = lambda_selection)
       }else if(current_method == "L2" || current_method == "L2-PBU"){
@@ -197,7 +244,7 @@ save(file = info_file, list = c("A"))
       
       if(!is.null(obj_method)){
         if(!sameP_allhorizons || (sameP_allhorizons && h == 1)){
-          obj_learn <- new_learnreg(objreg_valid, my_bights, obj_method)
+          obj_learn <- new_learnreg(objreg_valid, my_bights, obj_method, TRUE, FALSE)
         }else{
           #obj_learn <- results[[current_method]]$obj_learn
           obj_learn <- results_h1[[current_method]]

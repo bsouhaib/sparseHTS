@@ -1,4 +1,4 @@
-new_learnreg <- function(objreg, objhts, objmethod, standardizeX = TRUE, centerY = TRUE){
+new_learnreg <- function(objreg, objhts, objmethod, standardizeX, centerY){
   Y <- objreg$Y
   Yhat <- objreg$Yhat
   
@@ -69,8 +69,10 @@ new_learnreg <- function(objreg, objhts, objmethod, standardizeX = TRUE, centerY
                        c(list(x = X, y = y), 
                          config$cvglmnet , 
                          list(lambda = mylambdas), 
-                         list(parallel = do.parallel)))
+                         list(parallel = do.parallel),
+                         list(penalty.factor = weights_shrinkage)  ))
       s <- ifelse(objmethod$selection == "min", "lambda.min", "lambda.1se")
+      
       
     }
   }else if(algo == "GGLASSO"){
