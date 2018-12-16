@@ -69,10 +69,11 @@ new_learnreg <- function(objreg, objhts, objmethod, standardizeX, centerY){
                        c(list(x = X, y = y), 
                          config$cvglmnet , 
                          list(lambda = mylambdas), 
-                         list(parallel = do.parallel),
-                         list(penalty.factor = weights_shrinkage)  ))
+                         list(parallel = do.parallel) ))
+                         #,
+                         #list(penalty.factor = weights_shrinkage)  ))
       s <- ifelse(objmethod$selection == "min", "lambda.min", "lambda.1se")
-      
+      #browser()
       
     }
   }else if(algo == "GGLASSO"){
@@ -86,7 +87,7 @@ new_learnreg <- function(objreg, objhts, objmethod, standardizeX, centerY){
                      standardizeX = standardizeX, centerY = centerY)
 } 
 
-new_predtest <- function(objreg, objhts, objlearn = NULL){
+new_predtest <- function(objreg, objhts, objlearn = NULL, svalue = NULL){
   
   objmethod <- objlearn$objmethod
   algo <- objmethod$algo
@@ -111,7 +112,11 @@ new_predtest <- function(objreg, objhts, objlearn = NULL){
     if(algo == "GGLASSO"){
       vec_ytile_test <- as.numeric(predict(objlearn$model, newx = X_test, s = objlearn$s))
     }else{
-      vec_ytile_test <- as.numeric(predict(objlearn$model, newx = X_test, type = "response", s = objlearn$s))
+      if(is.null(svalue)){
+        vec_ytile_test <- as.numeric(predict(objlearn$model, newx = X_test, type = "response", s = objlearn$s))
+      }else{
+        vec_ytile_test <- as.numeric(predict(objlearn$model, newx = X_test, type = "response", s = svalue))
+      }
     }
     
     Ytilde_test <- fct_inv_vec(vec_ytile_test, 
