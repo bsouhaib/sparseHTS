@@ -40,7 +40,7 @@ load(info_file)
      stop("FILE DOES NOT EXIST")
     }
       load(myfile) 
-     
+      
       H <- length(results_allh)
       errors <- lapply(seq(H), function(h){
         FUTURE <-t(Y_test_allh[h, , ])
@@ -58,6 +58,82 @@ load(info_file)
       })
     
 errors_all <- errors
+
+
+
+###### INDEP
+add.bias <- FALSE
+naggts <- nrow(A)
+nbts <- ncol(A)
+myfile <- file.path(results.folder, paste("resultsINDEP_", hierarchy_name, "_", lambda_selection, "_", add.bias, ".Rdata", sep = ""))
+load(myfile)
+
+S <- rbind(A, diag(nbts))
+ypredreg_test <- t(S %*% t(pred_reg))
+ypredmint_test <- t(S %*% t(pred_mint))
+ypredbu_test <- t(S %*% t(pred_bu))
+ypredbase_test <- pred_base
+ypredbasebiased_test <- pred_basebiased
+ytrue_test <- t(Y_test_allh[horizon_of_interest, , ])
+
+err_base <- apply((ytrue_test - ypredbase_test)^2, 2, mean)
+err_reg <- apply((ytrue_test - ypredreg_test)^2, 2, mean)
+err_mint <- apply((ytrue_test - ypredmint_test)^2, 2, mean)
+err_bu <- apply((ytrue_test - ypredbu_test)^2, 2, mean)
+
+
+#Yhat_test_h  <- t(Yhat_test_allh[horizon_of_interest, , ])
+#errors_base <- (ytrue_test - Yhat_test_h)^2
+#err_base <- apply(errors_base, 2, mean)
+
+#err_base <- apply(errors[[1]][, , "BASE"], 2, mean)
+#err_mintshr <- apply(errors[[1]][, , "MINTshr"], 2, mean)
+#err_bu <- apply(errors[[1]][, , "BU"], 2, mean)
+#err_l1 <- apply(errors[[1]][, , "L1"], 2, mean)
+
+savepdf(file = "errors")
+par(mfrow = c(2, 1))
+
+index_bottom <- seq(naggts + 1, naggts + nbts)
+index_agg    <- seq(1, naggts)
+plot(err_reg[index_agg] - err_base[index_agg], type = 'h', ylab = "err", main = "METHOD")
+plot(err_reg[index_bottom] - err_base[index_bottom], type = 'h', , ylab = "err", main = "METHOD")
+plot(err_reg[index_agg] - err_base[index_agg], type = 'h', ylab = "err", main = "METHOD")
+plot( (err_reg[index_bottom] - err_base[index_bottom])[-251], type = 'h', , ylab = "err", main = "METHOD")
+
+
+#plot(err_l1[index_agg] - err_base[index_agg], type = 'h', ylab = "err", main = "L1")
+#plot(err_l1[index_bottom] - err_base[index_bottom], type = 'h', ylab = "err", main = "L1")
+
+#plot(err_mintshr[index_agg] - err_base[index_agg], type = 'h', ylab = "err", main = "MINTshr")
+#plot(err_mintshr[index_bottom] - err_base[index_bottom], type = 'h', ylab = "err", main = "MINTshr")
+
+plot(err_mint[index_agg] - err_base[index_agg], type = 'h', ylab = "err", main = "MINT")
+plot(err_mint[index_bottom] - err_base[index_bottom], type = 'h', ylab = "err", main = "MINT")
+
+plot(err_bu[index_agg] - err_base[index_agg], type = 'h', ylab = "err", main = "BU")
+plot(err_bu[index_bottom] - err_base[index_bottom], type = 'h', ylab = "err", main = "BU")
+
+
+dev.off()
+
+j <- 1
+plot.ts(ytrue_test[, j], main = j)
+lines(pred_base[, j], col = "blue")
+lines(pred_basebiased[, j], col = "orange")
+lines(ypredmint_test[, j], col = "red")
+lines(ypredreg_test[, j], col = "purple")
+
+head(err_mint - err_base, 5)
+head(err_reg - err_base, 5)
+
+D <- cbind((ytrue_test[, j] - ypredreg_test[, j])^2,
+           (ytrue_test[, j] - ypredmint_test[, j])^2,
+           (ytrue_test[, j] - ypredbase_test[, j])^2)
+matplot(x = seq(nrow(D)), D, pch = 21, col = c("purple", "red", "black"), type = 'p', cex = 0.4)
+
+###### ###### ###### ###### ###### 
+stop("done")
 
 #errors_all[[1]]
 #print(apply(apply(errors_all[[1]], c(1, 3), sum), 2, mean))

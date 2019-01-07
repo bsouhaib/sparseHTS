@@ -21,7 +21,7 @@ if(do.diff){
 #name_methods <- c("L1-PBU", "BU", "MINTshr", "MINTols")
 name_methods <- c("L1-POLS", "BU", "MINTshr", "MINTols")
 name_methods <- c("L1", "BU", "MINTshr", "MINTols")
-name_methods <- c("L1-POLS")
+name_methods <- c("L1", "BU", "MINTshr", "MINTols")
 nb_methods <- length(name_methods)
 #######
 

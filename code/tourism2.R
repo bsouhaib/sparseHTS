@@ -13,63 +13,50 @@ library(methods)
 library(doMC)
 library(gglasso)
 
-do.diff <- FALSE
-if(do.diff){
-  print("DO DIFF IS TRUE !!!!!!")
-}
+H <- 2
 
-#name_methods <- c("L1-PBU", "BU", "MINTshr", "MINTols")
-name_methods <- c("L1-POLS", "BU", "MINTshr", "MINTols")
-name_methods <- c("BU", "MINTshr", "MINTols")
-nb_methods <- length(name_methods)
-#######
+# CHECK ALPHA IS AT alpha = 1
+
+do.conditioning <- FALSE
+  #Tyear <- rep(seq(12), 19)
+  #Tyear <- rep( c(1, rep(0, 11)), 19)
+  Tyear <- seq(12*19)
+add.bias <- FALSE
+nobiasforwho <- "agg"  # "bottom" "agg"
+regularization <- "lasso" # ridge
+#regularization <- "ridge"
+
+
+# INCLUDE INTERCEPT ?????
+# P_REF ?????#
+#stop("PUT INTERCEPT AT TRUE")
+#stop("PUT standardize AT TRUE")
+
 
 #config_main <- list(intercept = FALSE, standardize = FALSE, alpha = .98, thresh = 10^-6, nlambda = 50)
-config_main <- list(intercept = FALSE, standardize = FALSE, alpha = 1, thresh = 10^-6, nlambda = 50)
+config_main <- list(intercept = TRUE, standardize = FALSE, alpha = ifelse(regularization == "lasso", 1, 0), 
+                    thresh = 10^-6, nlambda = 50)
 config_cvglmnet <- c(config_main, list(nfolds = 6))
 
 lambda_selection <- "1se"
 #lambda_selection <- "min"
 experiment <- "tourism"
-H <- 12
 
-mc.cores.basef <- 30 # 20
+mc.cores.basef <- 6 #30 # 20
 mc.cores.methods <- 1 #4 #10 # mc.cores.basef  AND mc.cores.methods
 nb.cores.cv <- 6 #3
-
 do.save <- TRUE
 refit_step <- 12
-sameP_allhorizons <- TRUE
-
-do.adaptive <- FALSE # MISTAKE HERE -> the weights are for beta !!!!
-add.bias <- FALSE
-
-#config_forecast <- list(fit_fct = auto.arima, forecast_fct = Arima, 
-#                        param_fit_fct = list(seasonal = TRUE, ic = "aic",  max.p = 2, max.q = 2,
-#                                             approximation = TRUE, stationary = FALSE, num.cores = 2), 
-#                        param_forecast_fct = list(use.initial.values = TRUE))
 
 config_forecast <- list(fit_fct = auto.arima, forecast_fct = Arima, 
                         param_fit_fct = list(seasonal = TRUE, ic = "aic",  max.p = 1, max.q = 0, max.P = 1, max.Q = 0,
                                              approximation = TRUE, stationary = FALSE, num.cores = 2), 
                         param_forecast_fct = list(use.initial.values = TRUE))
 
-
-if(FALSE){
-  # CONSIDER ETS ????
-config_forecast <- list(fit_fct = ets, refit_fct = ets, 
-                        param_fit_fct = list(), 
-                        param_forecast_fct = list(use.initial.values = TRUE))
-}
-
 config_forecast_agg <- config_forecast_bot <- config_forecast
-
 
 X <- read.csv("../data/Tourism data_v3.csv")
 Z <- X[, -seq(2)]
-if(do.diff){
-  Z <- apply(Z, 2, diff, 12)
-}
 y <- gts(Z, characters = list(c(1, 1, 1), c(3)))
 S <- smatrix(y)
 
@@ -85,8 +72,14 @@ bts <- ts(bts, c(1998, 1), freq = 12)
 A <- head(S, nrow(S) - ncol(Z))
 
 
-T_train <- 108 # 96 #7
-T_valid <- 60 # 5
+
+# PREVIOUSLY
+#T_train <- 9 * 12 #108 # 96 #7
+#T_valid <- 5 * 12 #60 # 5
+
+T_train <- 5 * 12
+T_valid <- 9 * 12
+
 T_learn <- T_train + T_valid
 T_test <- 60
 T_all <- T_learn + T_test
@@ -103,13 +96,14 @@ save(file = info_file, list = c("A"))
   
 
   file_bf <- file.path(bf.folder, 
-                       paste("bf_", experiment, "_", refit_step, ".Rdata", sep = ""))  
+                       paste("bf_", experiment, "_", refit_step, "_NEW", ".Rdata", sep = ""))  
  
    
   if(do.save && file.exists(file_bf)){
     load(file_bf)
     print("loading")
   }else{
+    print("base forecasting ...")
     ### valid
     list_subsets_valid <- lapply(seq(T_train, T_learn - H), function(i){c(i - T_train + 1, i)})
     data_valid <- makeMatrices(my_bights, list_subsets_valid, H = H, 
@@ -132,155 +126,188 @@ save(file = info_file, list = c("A"))
   ### test
   Yhat_test_allh  <- data_test$Yhat
   Y_test_allh    <- data_test$Y
+  
   Eresiduals <- data_test$Eresiduals
-  ##stop("done")
+
+  
   save_Yhat_test_allh <- Yhat_test_allh
   
-  # 
-  #stop("HERE")
-  #data_valid$IN_y
-  #data_valid$IN_yhat
-  
-  weights_shrinkage <- rep(1, ncol(Eresiduals))
-  if(do.adaptive){
-    weights_shrinkage <- 1/apply(Eresiduals^2, 2, mean)
+  if(add.bias){
+    nvalid <- dim(Yhat_valid_allh)[3]
+    ntest  <- dim(Yhat_test_allh)[3]
+    ninsample <- nrow(data_test$IN_y)
+    
+    n <- my_bights$nts
+    #u <- runif(2 * n, 0.8, 0.95)
+    u <- runif(2 * n, 0.6, 0.85)
+    
+    vec <- seq(1, 2*n, 2)
+    
+    ubias <- lapply(vec, function(j){
+      myinterval <- sort(u[j:(j+1)])
+      delta_valid <- runif(nvalid, myinterval[1], myinterval[2])
+      delta_test <- runif(ntest, myinterval[1], myinterval[2])
+      #delta_insample <- runif(ninsample, myinterval[1], myinterval[2])
+      list(delta_valid = delta_valid, delta_test = delta_test)
+    })
+
+    delta_valid <- simplify2array(lapply(ubias, "[[", "delta_valid"))
+    delta_test <- simplify2array(lapply(ubias, "[[", "delta_test"))
+    #delta_insample <- simplify2array(lapply(ubias, "[[", "delta_insample"))
+    
+    if(nobiasforwho == "bottom"){
+      idb <- seq(my_bights$naggts + 1, my_bights$naggts + my_bights$nbts)
+      
+      delta_valid[, idb] <- 1
+      delta_test[, idb]  <- 1
+    }else if(nobiasforwho == "agg"){
+      idb <- seq(my_bights$naggts)  
+      
+      delta_valid[, idb] <- 1
+      delta_test[, idb]  <- 1
+    }
+    
+
+    
+    for(h in seq(H)){
+      Yhat_valid_allh[h, , ] <- Yhat_valid_allh[h, , ] * t(delta_valid)
+      Yhat_test_allh[h, , ]  <- Yhat_test_allh[h, , ]  * t(delta_test)
+    }
+    
+    #Eresiduals <- data_test$IN_y - (data_test$IN_yhat * delta_insample)
+    
   }
   
-  config_basic <- config_main
-  config <- list(glmnet = config_basic, cvglmnet = config_cvglmnet)
-  config_gglasso <- list(eps = 10^-6, nlambda = 50, intercept = FALSE, maxit = 1e+7)
   
-  #sgl_config    <- list(nfold = 3, standardize = FALSE, alpha = .8)
-  #print(glmnet_config)
-  #print(sgl_config)
+  config <- list(glmnet = config_main, cvglmnet = config_cvglmnet)
+  objmethod <- list(selection = lambda_selection)
   
-  # naive predictions
-  #id <- sapply(list_subsets_test, function(vec){ vec[2] })
-  #predictions_naive <- my_bights$yts[id, ]
+  P_BU <- Matrix(0, nrow = my_bights$nbts, ncol = my_bights$nts, sparse = T)
+  P_BU[cbind(seq(my_bights$nbts), seq(my_bights$nts - my_bights$nbts + 1, my_bights$nts)) ] <- 1
+  P_OLS <- solve(t(S) %*% S) %*% t(S)
+  P_0 <- Matrix(0, nrow = my_bights$nbts, ncol = my_bights$nts, sparse = T)
   
-  #predictions_avg <- t(sapply(list_subsets_test, function(vec){ 
-  #  apply(my_bights$yts[vec[1]:vec[2], ], 2, mean)
-  #}))
+  if(do.conditioning){
+    P_BU <- cbind(P_BU, 0)
+    P_OLS <- cbind(P_OLS, 0)
+    P_0 <- cbind(P_0, 0)
+  }
   
-  Ytilde_test_allh <- array(NA, c(dim(Yhat_test_allh), nb_methods) )
+  wmethod <- substr("MINTshr", 5, 7)
+  cov_method <-  switch(wmethod, ols = "ols", shr = "shrink", sam = "sample", NA)
+  e_residuals <- switch(wmethod, ols = NULL, shr = Eresiduals, sam = Eresiduals, NA)
+  obj_learn <- mint(my_bights, method = cov_method, e_residuals = e_residuals , h = 1)
+  P_MINT <- obj_learn$P
   
+  if(do.conditioning){
+    P_MINT <- cbind(P_MINT, 0)
+  }
+  
+  P_REF <- P_0
+  #P_REF <- P_BU
+  #P_REF <- P_OLS
+  #P_REF  <- P_MINT
+  
+  Ytilde_test_allh <- array(NA, dim(Yhat_test_allh))
   results_allh <- vector("list", H)
-  for(h in seq(H)){
-    print(paste("h = ", h, sep = ""))
+  h <- 1
+  Yhat_valid_h <- t(Yhat_valid_allh[h, , ])
+  Y_valid_h    <- t(Y_valid_allh[h, , ])
+  Yhat_test_h  <- t(Yhat_test_allh[h, , ])
+  save_Yhat_test_h <- t(save_Yhat_test_allh[h, , ])
+  
+  if(do.conditioning){
+    idvalid <- seq(T_train + 1, T_learn - H + 1)
+    idtest <- seq(T_learn + 1, T_learn + T_test - H + 1)
+
+    Yhat_valid_h <- cbind(Yhat_valid_h, Tyear[idvalid])
+    Yhat_test_h  <- cbind(Yhat_test_h, Tyear[idtest])
     
-    Yhat_valid_h <- t(Yhat_valid_allh[h, , ])
-    Y_valid_h    <- t(Y_valid_allh[h, , ])
-    Yhat_test_h  <- t(Yhat_test_allh[h, , ])
+    penalty.factor	<- rep(1, ncol(Yhat_valid_h))
+    penalty.factor[ncol(Yhat_valid_h)] <- 0
+
+    config$glmnet <- c(config$glmnet, list(penalty.factor = penalty.factor))
+    config$cvglmnet <- c(config$cvglmnet, list(penalty.factor = penalty.factor))
     
-    if(add.bias){
-      nbts <- my_bights$nbts
-      bias_mu_bottom <- rep(0.05, nbts); bias_sd_bottom <- rep(0.05, nbts) 
-      bias_mu_agg <- A %*% bias_mu_bottom
-      bias_sd_agg <- A %*% bias_sd_bottom
-      bias_mu <- c(bias_mu_agg, bias_mu_bottom)
-      bias_sd <- c(bias_sd_agg, bias_sd_bottom)
-      
-      nvalid <- ncol(Yhat_valid_allh[h, , ])
-      MYBIAS_valid <- t(sapply(seq(my_bights$nts), function(j){ 
-        rnorm(nvalid, mean = bias_mu[j], sd = bias_sd[j])
-      }))
-      Yhat_valid_allh[h, , ]  <- Yhat_valid_allh[h, , ]  + MYBIAS_valid
-      
-      ntest <- ncol(Yhat_test_allh[1, , ])
-      MYBIAS_test <- t(sapply(seq(my_bights$nts), function(j){ 
-        rnorm(ntest, mean = bias_mu[j], sd = bias_sd[j])
-      }))
-      Yhat_test_allh[h, , ] <- Yhat_test_allh[h, , ] + MYBIAS_test 
+  }
+  
+  pred_reg <- matrix(NA, nrow = nrow(Yhat_test_h), ncol = my_bights$nbts)
+  for(j in seq(my_bights$nbts)){
+    print(j)
+    
+    k <- my_bights$naggts + j
+    X <- Yhat_valid_h
+    
+    B_towards_valid <- X %*% t(P_REF)
+    y <- Y_valid_h[, k] - B_towards_valid[, j]
+
+    
+    model <- do.call(glmnet, c(list(x = X, y = y), config$glmnet)) 
+    mylambdas <- model$lambda
+    do.parallel <- FALSE
+    if(nb.cores.cv > 1){
+      do.parallel <- TRUE
+      registerDoMC(cores = nb.cores.cv)
     }
+    model <- do.call(cv.glmnet, 
+                     c(list(x = X, y = y), 
+                       config$cvglmnet , 
+                       list(lambda = mylambdas), 
+                       list(parallel = do.parallel) ))
+    s <- ifelse(objmethod$selection == "min", "lambda.min", "lambda.1se")
     
-    objreg_valid <- list(y = makey(Y_valid_h), X = makeX(Yhat_valid_h, my_bights), Y = Y_valid_h, Yhat = Yhat_valid_h, 
-                         Yhat_intercept = cbind(Yhat_valid_h, rep(1, nrow(Yhat_valid_h)) ) )
-    objreg_test <- list(X = makeX(Yhat_test_h, my_bights), Yhat = Yhat_test_h,
-                        Yhat_intercept = cbind(Yhat_test_h, rep(1, nrow(Yhat_test_h)) ) )
     
-    #nValid <- nrow(Yhat_valid_h)
-    #foldid <- rep(sample(seq(config$cvglmnet$nfolds), nValid, replace = T), my_bights$nts)
-    #glmnet_config_local <- c(glmnet_config, list(foldid = foldid))
-    #glmnet_config_local$nfolds <- NA
+    browser()
+    #ypred <- predict(model, X, s = s)
+    #matplot(cbind(ypred, y), lty = 1, type = 'l', col = c("purple", "black")); lines(Yhat_valid_h[, k], col = "blue")
     
-    nValid <- nrow(Yhat_valid_h)
-    foldid <- make_foldid(nValid, my_bights$nts, config$cvglmnet$nfolds)
-    
-    config$cvglmnet$foldid <- foldid
-    #config$cvglmnet$nfolds <- NA
-    config_gglasso$foldid <- foldid
-    
-    results <- mclapply(name_methods, function(current_method){
-      #print(paste(base::date(), " - ", current_method, sep = ""))
-      obj_method <- NULL
-      if(current_method == "BU"){
-        obj_learn <- bu(my_bights)
-      }else if(grepl("MINT", current_method)){
-        wmethod <- substr(current_method, 5, 7)
-        cov_method <-  switch(wmethod, ols = "ols", shr = "shrink", sam = "sample", NA)
-        e_residuals <- switch(wmethod, ols = NULL, shr = Eresiduals, sam = Eresiduals, NA)
-        obj_learn <- mint(my_bights, method = cov_method, e_residuals = e_residuals , h = h) # J U and W
-      }else if(current_method == "ERM"){
-        obj_learn <- ols(objreg_valid, my_bights) 
-      }else if(current_method == "L1"){
-        obj_method <- list(algo = "LASSO", Ptowards = NULL, config = config, selection = lambda_selection)
-      }else if(current_method == "L1-POLS"){
-        obj_method <- list(algo = "LASSO", Ptowards = POLS, config = config, selection = lambda_selection)
-      }else if(current_method == "L1-PBU"){
-        obj_method <- list(algo = "LASSO", Ptowards = pbu(my_bights), config = config, selection = lambda_selection)
-      }else if(current_method == "L2" || current_method == "L2-PBU"){
-        config_ridge <- config
-        config_ridge$glmnet$alpha <- 0
-        config_ridge$cvglmnet$alpha <- 0 # !!!!!!!
-        if(current_method == "L2"){
-          obj_method <- list(algo = "LASSO", Ptowards = NULL, config = config_ridge, selection = lambda_selection)
-        }else{
-          obj_method <- list(algo = "LASSO", Ptowards = pbu(my_bights), config = config_ridge, selection = lambda_selection)
-        }
-      }else if(current_method == "G-L1-PBU"){
-        obj_method <- list(algo = "GGLASSO", Ptowards = pbu(my_bights), config = config_gglasso, selection = lambda_selection)
+    do.varsel <- FALSE
+    if(do.varsel){
+      tmp_coeffs <- coef(model, s = "lambda.min")[-1]
+      idvar <- which(as.numeric(tmp_coeffs) != 0)
+      B_towards_test <- Yhat_test_h %*% t(P_REF)
+      
+      if(length(idvar) == 0){
+        pred_reg[, j] <- 0 + B_towards_test[, j] # 0 INSTEAD OF THE INTERCEPT
       }else{
-        obj_learn <- NULL
+        newXvalid <- X[, idvar, drop = F]
+        colnm <- paste("var", seq(ncol(newXvalid)), sep = "")
+        colnames(newXvalid) <- colnm
+        
+        model <- lm("y ~ .", data.frame(y , newXvalid))
+
+        X_test <- data.frame(Yhat_test_h[, idvar, drop = F])
+        colnames(X_test) <- colnm
+        pred_reg[, j] <- predict(model, X_test) + B_towards_test[, j]
       }
+     
+    }else{
+      X_test <- Yhat_test_h
+      B_towards_test <- X_test %*% t(P_REF)
+      pred_reg[, j] <- predict(model, X_test, s = s) + B_towards_test[, j]
       
-      if(!is.null(obj_method)){
-        if(!sameP_allhorizons || (sameP_allhorizons && h == 1)){
-          obj_learn <- new_learnreg(objreg_valid, my_bights, obj_method, TRUE, TRUE)
-        }else{
-          #obj_learn <- results[[current_method]]$obj_learn
-          obj_learn <- results_h1[[current_method]]
-        }
-      }
-      predictions <- NULL
-      if(!is.null(obj_learn)){
-        predictions <- new_predtest(objreg_test, my_bights, obj_learn)
-      }
+      # NO INTERCEPT IF ZERO MODEL
+      #tmp_coeffs <- coef(model, s = s)[-1]
+      #nb_nonzero <- length(which(as.numeric(tmp_coeffs) != 0))
+      #if(nb_nonzero == 0){
+      #  pred_reg[, j] <- 0 + B_towards_test[, j]
+      #}
       
-      if(current_method == "L1-POLS"){
-        browser()
-        # 
-      }
-      
-      list(obj_learn = obj_learn, predictions = predictions)
-    }, mc.cores = mc.cores.methods)
-    names(results) <- name_methods
-    
-    if(sameP_allhorizons && h == 1){
-      results_h1 <-  lapply(results , "[[", "obj_learn")
     }
-    
-    results[["BASE"]]   <- list(obj_learn = NULL, predictions = t(Yhat_test_allh[h, , ]))
-    results[["BASE2"]]   <- list(obj_learn = NULL, predictions = t(save_Yhat_test_allh[h, , ]))
-    
-    # results_allh[[h]] <-  results ONLY NEED PREDICTIONS + SAVE SPACE
-    results_allh[[h]] <- lapply(results , "[[", "predictions")
-    
-    
-  } # HORIZON
-  
-  
-  
-  myfile <- file.path(results.folder, paste("results_", experiment, "_", lambda_selection, ".Rdata", sep = ""))
-  save(file = myfile, list = c("results_allh", "Y_test_allh"))
+  }
+
+  pred_mint <- t(P_MINT %*% t(Yhat_test_h))
+  pred_bu   <- t(P_BU %*% t(Yhat_test_h)) 
+  pred_base <-  save_Yhat_test_h
+  pred_basebiased <- Yhat_test_h
+
+  myfile <- file.path(results.folder, paste("resultsINDEP_", experiment, "_", 
+                                            lambda_selection, "_", add.bias, ".Rdata", sep = ""))
+  save(file = myfile, list = c("pred_reg", "pred_mint", "pred_bu", 
+                               "pred_base", "pred_basebiased", "Y_test_allh"))
 
 
+  
+  
+  
+  
