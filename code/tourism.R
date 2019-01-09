@@ -21,7 +21,7 @@ if(do.diff){
 #name_methods <- c("L1-PBU", "BU", "MINTshr", "MINTols")
 name_methods <- c("L1-POLS", "BU", "MINTshr", "MINTols")
 name_methods <- c("L1", "BU", "MINTshr", "MINTols")
-name_methods <- c("L1", "BU", "MINTshr", "MINTols")
+name_methods <- c("L1", "L1-POLS", "BU", "MINTshr", "MINTols")
 nb_methods <- length(name_methods)
 #######
 
@@ -32,9 +32,9 @@ config_cvglmnet <- c(config_main, list(nfolds = 6))
 lambda_selection <- "1se"
 #lambda_selection <- "min"
 experiment <- "tourism"
-H <- 12
+H <- 2 #12
 
-mc.cores.basef <- 30 # 20
+mc.cores.basef <- 6 #30 # 20
 mc.cores.methods <- 1 #4 #10 # mc.cores.basef  AND mc.cores.methods
 nb.cores.cv <- 6 #3
 
@@ -45,15 +45,15 @@ sameP_allhorizons <- TRUE
 do.adaptive <- FALSE # MISTAKE HERE -> the weights are for beta !!!!
 add.bias <- FALSE
 
-#config_forecast <- list(fit_fct = auto.arima, forecast_fct = Arima, 
-#                        param_fit_fct = list(seasonal = TRUE, ic = "aic",  max.p = 2, max.q = 2,
-#                                             approximation = TRUE, stationary = FALSE, num.cores = 2), 
-#                        param_forecast_fct = list(use.initial.values = TRUE))
-
 config_forecast <- list(fit_fct = auto.arima, forecast_fct = Arima, 
-                        param_fit_fct = list(seasonal = TRUE, ic = "aic",  max.p = 1, max.q = 0, max.P = 1, max.Q = 0,
+                        param_fit_fct = list(seasonal = TRUE, ic = "aic",  max.p = 2, max.q = 2,
                                              approximation = TRUE, stationary = FALSE, num.cores = 2), 
                         param_forecast_fct = list(use.initial.values = TRUE))
+
+#config_forecast <- list(fit_fct = auto.arima, forecast_fct = Arima, 
+#                        param_fit_fct = list(seasonal = TRUE, ic = "aic",  max.p = 1, max.q = 0, max.P = 1, max.Q = 0,
+#                                             approximation = TRUE, stationary = FALSE, num.cores = 2), 
+#                        param_forecast_fct = list(use.initial.values = TRUE))
 
 
 if(FALSE){
@@ -75,11 +75,6 @@ y <- gts(Z, characters = list(c(1, 1, 1), c(3)))
 S <- smatrix(y)
 
 POLS <- solve(t(S) %*% S) %*% t(S)
-
-#vec <- colnames(Z)
-#
-#ally <- allts(y)
-#ally <- apply(ally, 2, diff, 12)
 
 bts <- Z
 bts <- ts(bts, c(1998, 1), freq = 12)
@@ -257,10 +252,9 @@ save(file = info_file, list = c("A"))
         predictions <- new_predtest(objreg_test, my_bights, obj_learn)
       }
       
-      if(current_method == "L1-POLS"){
-        browser()
-        # 
-      }
+      #if(current_method == "L1-POLS"){
+      #  browser()
+      #}
       
       list(obj_learn = obj_learn, predictions = predictions)
     }, mc.cores = mc.cores.methods)

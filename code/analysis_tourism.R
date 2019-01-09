@@ -27,19 +27,19 @@ horizon_of_interest <- 1
 do.ratio <- FALSE
 tag <- "NIPS"
 
-lambda_selection <- "1se"
-#lambda_selection <- "min"
+#lambda_selection <- "1se"
+lambda_selection <- "min"
 
 
 info_file <- file.path(results.folder, paste("info_", hierarchy_name, "_", lambda_selection, ".Rdata", sep = ""))
 load(info_file)
 
-
+if(FALSE){
     myfile <- file.path(results.folder, paste("results_", hierarchy_name, "_", lambda_selection, ".Rdata", sep = ""))
     if(!file.exists(myfile)){
      stop("FILE DOES NOT EXIST")
     }
-      load(myfile) 
+    load(myfile) 
       
       H <- length(results_allh)
       errors <- lapply(seq(H), function(h){
@@ -58,28 +58,64 @@ load(info_file)
       })
     
 errors_all <- errors
-
+}
 
 
 ###### INDEP
-add.bias <- FALSE
+do.deseasonalization <- TRUE
+add.bias <- TRUE
 naggts <- nrow(A)
 nbts <- ncol(A)
-myfile <- file.path(results.folder, paste("resultsINDEP_", hierarchy_name, "_", lambda_selection, "_", add.bias, ".Rdata", sep = ""))
+myfile <- file.path(results.folder, paste("resultsINDEP_", hierarchy_name, "_", 
+                                          lambda_selection, "_", add.bias,  "_", 
+                                          do.deseasonalization, ".Rdata", sep = ""))
 load(myfile)
 
 S <- rbind(A, diag(nbts))
 ypredreg_test <- t(S %*% t(pred_reg))
-ypredmint_test <- t(S %*% t(pred_mint))
+ypredmintshrink_test <- t(S %*% t(pred_mintshrink))
+ypredmintols_test <- t(S %*% t(pred_mintols))
 ypredbu_test <- t(S %*% t(pred_bu))
 ypredbase_test <- pred_base
 ypredbasebiased_test <- pred_basebiased
 ytrue_test <- t(Y_test_allh[horizon_of_interest, , ])
+ypredjoint_test <- pred_joint
 
-err_base <- apply((ytrue_test - ypredbase_test)^2, 2, mean)
-err_reg <- apply((ytrue_test - ypredreg_test)^2, 2, mean)
-err_mint <- apply((ytrue_test - ypredmint_test)^2, 2, mean)
-err_bu <- apply((ytrue_test - ypredbu_test)^2, 2, mean)
+sqderrors_base <- (ytrue_test - ypredbase_test)^2
+sqderrors_basebiased <- (ytrue_test - ypredbasebiased_test)^2
+sqderrors_reg <- (ytrue_test - ypredreg_test)^2
+sqderrors_mintshrink <- (ytrue_test - ypredmintshrink_test)^2
+sqderrors_mintols <- (ytrue_test - ypredmintols_test)^2
+sqderrors_bu <- (ytrue_test - ypredbu_test)^2
+sqderrors_joint <- (ytrue_test - ypredjoint_test)^2
+
+err_base <- apply(sqderrors_base, 2, mean)
+err_basebiased <- apply(sqderrors_basebiased, 2, mean)
+err_reg <- apply(sqderrors_reg, 2, mean)
+err_mintshrink <- apply(sqderrors_mintshrink, 2, mean)
+err_mintols <- apply(sqderrors_mintols, 2, mean)
+err_bu <- apply(sqderrors_bu, 2, mean)
+err_joint <- apply(sqderrors_joint, 2, mean)
+
+# STD ERRORS
+x <- apply(t(sqderrors_base), 2, sum)
+print(paste(mean(x), " - ", std.error(x)))
+
+x <- apply(t(sqderrors_reg), 2, sum)
+print(paste(mean(x), " - ", std.error(x)))
+
+x <- apply(t(sqderrors_mintshrink), 2, sum)
+print(paste(mean(x), " - ", std.error(x)))
+
+x <- apply(t(sqderrors_mintols), 2, sum)
+print(paste(mean(x), " - ", std.error(x)))
+
+x <- apply(t(sqderrors_bu), 2, sum)
+print(paste(mean(x), " - ", std.error(x)))
+
+x <- apply(t(sqderrors_joint), 2, sum)
+print(paste(mean(x), " - ", std.error(x)))
+
 
 
 #Yhat_test_h  <- t(Yhat_test_allh[horizon_of_interest, , ])
@@ -108,8 +144,8 @@ plot( (err_reg[index_bottom] - err_base[index_bottom])[-251], type = 'h', , ylab
 #plot(err_mintshr[index_agg] - err_base[index_agg], type = 'h', ylab = "err", main = "MINTshr")
 #plot(err_mintshr[index_bottom] - err_base[index_bottom], type = 'h', ylab = "err", main = "MINTshr")
 
-plot(err_mint[index_agg] - err_base[index_agg], type = 'h', ylab = "err", main = "MINT")
-plot(err_mint[index_bottom] - err_base[index_bottom], type = 'h', ylab = "err", main = "MINT")
+plot(err_mintshrink[index_agg] - err_base[index_agg], type = 'h', ylab = "err", main = "MINT")
+plot(err_mintshrink[index_bottom] - err_base[index_bottom], type = 'h', ylab = "err", main = "MINT")
 
 plot(err_bu[index_agg] - err_base[index_agg], type = 'h', ylab = "err", main = "BU")
 plot(err_bu[index_bottom] - err_base[index_bottom], type = 'h', ylab = "err", main = "BU")
@@ -121,16 +157,38 @@ j <- 1
 plot.ts(ytrue_test[, j], main = j)
 lines(pred_base[, j], col = "blue")
 lines(pred_basebiased[, j], col = "orange")
-lines(ypredmint_test[, j], col = "red")
+lines(ypredmintshrink_test[, j], col = "red")
+lines(ypredmintols_test[, j], col = "darkgreen")
 lines(ypredreg_test[, j], col = "purple")
 
-head(err_mint - err_base, 5)
+head(err_mintshrink - err_base, 5)
+head(err_mintols - err_base, 5)
 head(err_reg - err_base, 5)
 
 D <- cbind((ytrue_test[, j] - ypredreg_test[, j])^2,
-           (ytrue_test[, j] - ypredmint_test[, j])^2,
+           (ytrue_test[, j] - ypredmintshrink_test[, j])^2,
+           (ytrue_test[, j] - ypredmintols_test[, j])^2,
            (ytrue_test[, j] - ypredbase_test[, j])^2)
-matplot(x = seq(nrow(D)), D, pch = 21, col = c("purple", "red", "black"), type = 'p', cex = 0.4)
+matplot(x = seq(nrow(D)), D, pch = 21, col = c("purple", "red", "darkgreen", "black"), type = 'p', cex = 0.4)
+
+for(k in seq(2)){
+  if (k == 1){
+    myindex <- index_agg
+    print("Aggregated series")
+  }else{
+    myindex <- index_bottom
+    print("Bottom level series")
+  }
+  print(paste("BU        : ", prettyNum(sum(err_bu[myindex]), big.mark = ",", scientific = FALSE)) )
+  print(paste("BASE      : ", prettyNum(sum(err_base[myindex]), big.mark = ",", scientific = FALSE)) )
+  print(paste("BASE bias : ", prettyNum(sum(err_basebiased[myindex]), big.mark = ",", scientific = FALSE)) )
+  print(paste("MINTSHRINK: ", prettyNum(sum(err_mintshrink[myindex]), big.mark = ",", scientific = FALSE)) )
+  print(paste("MINTOLS   : ", prettyNum(sum(err_mintols[myindex]), big.mark = ",", scientific = FALSE)) )
+  print(paste("REG       : ", prettyNum(sum(err_reg[myindex]), big.mark = ",", scientific = FALSE)) )
+  print(paste("REG JOINT : ", prettyNum(sum(err_joint[myindex]), big.mark = ",", scientific = FALSE)) )
+  
+}
+
 
 ###### ###### ###### ###### ###### 
 stop("done")
