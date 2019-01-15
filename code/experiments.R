@@ -13,49 +13,48 @@ library(methods)
 library(doMC)
 library(gglasso)
 
-do.deseasonalization <- TRUE
+experiment <- "tourism"
+#experiment <- "wikipedia"
+
+do.joint <- FALSE
+#do.joint <-  experiment != "wikipedia"
+
+if(experiment == "tourism"){
+  do.log <- FALSE
+}else{
+  do.log <- TRUE
+}
+do.scaling <- TRUE
 do.cleaning <- TRUE
-add.bias <- TRUE
+do.deseasonalization <- TRUE
+do.loo <- FALSE
+use.intercept <- FALSE
+add.bias <- FALSE
 nobiasforwho <- "agg"  # "bottom" "agg"
 regularization <- "lasso" # ridge
-#regularization <- "ridge"
 
 print(do.deseasonalization)
 print(do.cleaning)
 print(add.bias)
 print(regularization)
 
-do.conditioning <- FALSE
-#Tyear <- rep(seq(12), 19)
-#Tyear <- rep( c(1, rep(0, 11)), 19)
-Tyear <- seq(12*19)
-
 H <- 2
 
 
-
-
-
-# INCLUDE INTERCEPT ?????
-# P_REF ?????#
-#stop("PUT INTERCEPT AT TRUE")
-#stop("PUT standardize AT TRUE")
-
-
 #config_main <- list(intercept = FALSE, standardize = FALSE, alpha = .98, thresh = 10^-6, nlambda = 50)
-config_main <- list(intercept = TRUE, standardize = FALSE, alpha = ifelse(regularization == "lasso", 1, 0), 
+config_main <- list(intercept = use.intercept, standardize = FALSE, alpha = ifelse(regularization == "lasso", 1, 0), 
                     thresh = 10^-6, nlambda = 50)
-config_cvglmnet <- c(config_main, list(nfolds = 6))
+config_cvglmnet <- c(config_main, list(nfolds = 3))
 
 #lambda_selection <- "1se"
 lambda_selection <- "min"
-experiment <- "tourism"
+
 
 mc.cores.basef <- 6 #30 # 20
 mc.cores.methods <- 1 #4 #10 # mc.cores.basef  AND mc.cores.methods
 nb.cores.cv <- 6 #3
 do.save <- TRUE
-refit_step <- 12
+
 
 config_forecast <- list(fit_fct = auto.arima, forecast_fct = Arima, 
                         param_fit_fct = list(seasonal = TRUE, ic = "aic",  max.p = 1, max.q = 0, max.P = 1, max.Q = 0,
@@ -64,39 +63,70 @@ config_forecast <- list(fit_fct = auto.arima, forecast_fct = Arima,
 
 config_forecast_agg <- config_forecast_bot <- config_forecast
 
-X <- read.csv("../data/Tourism data_v3.csv")
-Z <- X[, -seq(2)]
-
-obj_sort <- sort(apply(Z == 0, 2, sum), index = T, decreasing = T)
-Z <- Z[, -head(obj_sort$ix, 34)]
-
-if(TRUE){
-  series_name <- substr(colnames(Z), 1, 3)
-  series_name <-sapply(seq(length(series_name)), function(j){
-    paste(series_name[j], sprintf("%04d", j), sep = "")
-  })
-  colnames(Z) <- series_name
-  y <- hts(Z, characters = c(1, 1, 1, 4))
-}else{
-  y <- gts(Z, characters = list(c(1, 1, 1), c(3)))
+if(experiment == "tourism"){
+  X <- read.csv("../data/Tourism data_v3.csv")
+  Z <- X[, -seq(2)]
+  obj_sort <- sort(apply(Z == 0, 2, sum), index = T, decreasing = T)
+  Z <- Z[, -head(obj_sort$ix, 34)]
+  if(TRUE){
+    series_name <- substr(colnames(Z), 1, 3)
+    series_name <-sapply(seq(length(series_name)), function(j){
+      paste(series_name[j], sprintf("%04d", j), sep = "")
+    })
+    colnames(Z) <- series_name
+    y <- hts(Z, characters = c(1, 1, 1, 4))
+  }else{
+    y <- gts(Z, characters = list(c(1, 1, 1), c(3)))
+  }
+  refit_step <- 12
+}else if(experiment == "wikipedia"){
+  source("wikipedia.R")
+  
+  set.outliers <- c(185L, 277L, 4L, 182L, 65L, 77L, 138L, 128L, 30L, 274L)
+  Z <- Z[, -set.outliers]
+  
+  y <- hts(Z, characters = c(2, 3, 3, 4) )
+  refit_step <- 14
 }
+
+vec <- sapply(y$nodes, length)
+niveaus <- unlist(sapply(seq(length(vec)), function(i){
+  rep(i, vec[i])
+}))
+niveaus <- c(niveaus, rep(length(vec) + 1, ncol(y$bts)))
+
 S <- smatrix(y)
 A <- head(S, nrow(S) - ncol(Z))
 
 
 POLS <- solve(t(S) %*% S) %*% t(S)
 
-bts <- Z
+if(do.log){
+  bts <- log(1 + Z)
+}else{
+  bts <- Z
+}
 
-
+if(do.cleaning){
+  cleaned_bts <- sapply(seq(ncol(bts)), function(j){
+    tsclean(bts[, j])
+  })
+  bts <- cleaned_bts
+}
 
 if(do.deseasonalization){
   yts <- t(S %*% t(bts))
-  yts <- ts(yts, c(1998, 1), freq = 12)
+  
+  if(experiment == "tourism"){
+    yts <- ts(yts, c(1998, 1), freq = 12)
+  }else if(experiment == "wikipedia"){
+    yts <- ts(yts, freq = 7)
+  }
   
   zts <- sapply(seq(ncol(yts)), function(j){
     obj <- stl(yts[, j], s.window = "periodic", robust = TRUE)
     obj$time.series[, c("remainder")]
+    #yts[, j] - obj$time.series[, c("seasonal")]
   })
   
   nbts <- ncol(bts)
@@ -112,30 +142,43 @@ if(do.deseasonalization){
   bts <- zts_bottom_tilde
 }
 
-if(do.cleaning){
-  cleaned_bts <- sapply(seq(ncol(bts)), function(j){
-    tsclean(bts[, j])
-  })
-  bts <- cleaned_bts
+if(do.scaling){
+  bts <- apply(bts, 2, scale, center = T, scale = T)
 }
 
-bts <- ts(bts, c(1998, 1), freq = 12)
+datasave_file <- file.path(results.folder, paste("datasave_", experiment, "_", 
+                                                 do.log, "_", do.deseasonalization, "_", do.scaling, ".Rdata", sep = ""))
+save(file = datasave_file, list = c("Z", "bts", "cleaned_bts"))
 
-# PREVIOUSLY
-#T_train <- 9 * 12 #108 # 96 #7
-#T_valid <- 5 * 12 #60 # 5
 
-T_train <- 5 * 12
-T_valid <- 9 * 12
+if(experiment == "tourism"){
+  bts <- ts(bts, c(1998, 1), freq = 12)
+}else if(experiment == "wikipedia"){
+  bts <- ts(bts, freq = 7)
+}
+
+
+if(experiment == "tourism"){
+  # PREVIOUSLY
+  #T_train <- 9 * 12 #108 # 96 #7
+  #T_valid <- 5 * 12 #60 # 5
+  
+  T_train <- 5 * 12
+  T_valid <- 9 * 12
+  T_test <- 60
+}else if(experiment == "wikipedia"){
+  T_train <- 86
+  T_valid <- 160
+  T_test <- 120
+}
 
 T_learn <- T_train + T_valid
-T_test <- 60
 T_all <- T_learn + T_test
 stopifnot(T_all == nrow(bts))
 
 my_bights <- bights(bts, A)
-info_file <- file.path(results.folder, paste("info_", experiment, "_", lambda_selection, ".Rdata", sep = ""))
-save(file = info_file, list = c("A"))
+info_file <- file.path(results.folder, paste("info_", experiment, ".Rdata", sep = ""))
+save(file = info_file, list = c("A", "niveaus"))
  
   
   print(paste(" m = ", my_bights$nbts, " - n = ", my_bights$nts, sep = ""))
@@ -144,13 +187,14 @@ save(file = info_file, list = c("A"))
   
 
   file_bf <- file.path(bf.folder, 
-                       paste("bf_", experiment, "_", refit_step, "_", do.deseasonalization, ".Rdata", sep = ""))  
+                       paste("bf_", experiment, "_", refit_step, "_", do.log, "_", do.deseasonalization, "_", do.scaling, ".Rdata", sep = ""))  
  
    
   if(do.save && file.exists(file_bf)){
     load(file_bf)
     print("loading")
   }else{
+    print(base::date())
     print("base forecasting ...")
     ### valid
     list_subsets_valid <- lapply(seq(T_train, T_learn - H), function(i){c(i - T_train + 1, i)})
@@ -165,6 +209,7 @@ save(file = info_file, list = c("A"))
     if(do.save){
       save(file = file_bf, list = c("data_valid", "data_test", "list_subsets_valid", "list_subsets_test"))
     }
+    print(base::date())
   }
   
   ### valid
@@ -177,8 +222,8 @@ save(file = info_file, list = c("A"))
   
   Eresiduals <- data_test$Eresiduals
 
-  
   save_Yhat_test_allh <- Yhat_test_allh
+  
   
   if(add.bias){
     nvalid <- dim(Yhat_valid_allh)[3]
@@ -187,7 +232,7 @@ save(file = info_file, list = c("A"))
     
     n <- my_bights$nts
     #u <- runif(2 * n, 0.8, 0.95)
-    u <- runif(2 * n, 0.4, 0.6)
+    u <- runif(2 * n, 0.05, 0.1)
     
     vec <- seq(1, 2*n, 2)
     
@@ -230,16 +275,13 @@ save(file = info_file, list = c("A"))
   config <- list(glmnet = config_main, cvglmnet = config_cvglmnet)
   objmethod <- list(selection = lambda_selection)
   
+  
+  
   P_BU <- Matrix(0, nrow = my_bights$nbts, ncol = my_bights$nts, sparse = T)
   P_BU[cbind(seq(my_bights$nbts), seq(my_bights$nts - my_bights$nbts + 1, my_bights$nts)) ] <- 1
   P_OLS <- solve(t(S) %*% S) %*% t(S)
   P_0 <- Matrix(0, nrow = my_bights$nbts, ncol = my_bights$nts, sparse = T)
   
-  if(do.conditioning){
-    P_BU <- cbind(P_BU, 0)
-    P_OLS <- cbind(P_OLS, 0)
-    P_0 <- cbind(P_0, 0)
-  }
   
   wmethod <- substr("MINTshr", 5, 7)
   cov_method <-  switch(wmethod, ols = "ols", shr = "shrink", sam = "sample", NA)
@@ -248,11 +290,7 @@ save(file = info_file, list = c("A"))
   P_MINTSHRINK <- obj_learn$P
   P_MINTOLS <- P_OLS
   
-  if(do.conditioning){
-    P_MINTSHRINK <- cbind(P_MINTSHRINK, 0)
-    P_MINTOLS    <- cbind(P_MINTOLS, 0)
-  }
-  
+
   #P_REF <- P_0
   P_REF <- P_BU
   #P_REF <- P_OLS
@@ -265,23 +303,23 @@ save(file = info_file, list = c("A"))
   Y_valid_h    <- t(Y_valid_allh[h, , ])
   Yhat_test_h  <- t(Yhat_test_allh[h, , ])
   save_Yhat_test_h <- t(save_Yhat_test_allh[h, , ])
+
   
-  if(do.conditioning){
-    idvalid <- seq(T_train + 1, T_learn - H + 1)
-    idtest <- seq(T_learn + 1, T_learn + T_test - H + 1)
-
-    Yhat_valid_h <- cbind(Yhat_valid_h, Tyear[idvalid])
-    Yhat_test_h  <- cbind(Yhat_test_h, Tyear[idtest])
-    
-    penalty.factor	<- rep(1, ncol(Yhat_valid_h))
-    penalty.factor[ncol(Yhat_valid_h)] <- 0
-
-    config$glmnet <- c(config$glmnet, list(penalty.factor = penalty.factor))
-    config$cvglmnet <- c(config$cvglmnet, list(penalty.factor = penalty.factor))
-    
+  nValid <- nrow(Yhat_valid_h)
+  if(do.loo){
+    config$cvglmnet$nfolds <- nValid
+    config$cvglmnet$foldid <- NULL
+  }else{
+    nfolds <- config$cvglmnet$nfolds
+    nbperfold <- floor(nValid/nfolds)
+    foldid    <- rep(seq(nfolds), each = nbperfold)
+    remainder <- nValid %% nfolds
+    foldid    <- c(foldid, rep(nfolds, remainder))
+    config$cvglmnet$foldid <- foldid
   }
   
   pred_reg <- matrix(NA, nrow = nrow(Yhat_test_h), ncol = my_bights$nbts)
+  variables <- vector("list", my_bights$nbts)
   for(j in seq(my_bights$nbts)){
     if(j%%10 == 0)
     print(j)
@@ -308,7 +346,7 @@ save(file = info_file, list = c("A"))
                        list(parallel = do.parallel) ))
     s <- ifelse(objmethod$selection == "min", "lambda.min", "lambda.1se")
     
-    
+    variables[[j]] <- coef(model, s = s)
     #browser()
     #ypred <- predict(model, X, s = s)
     #matplot(cbind(ypred, y), lty = 1, type = 'l', col = c("purple", "black")); lines(Yhat_valid_h[, k], col = "blue")
@@ -347,6 +385,9 @@ save(file = info_file, list = c("A"))
       
     }
   }
+  
+  C_REG_withbias <- t(sapply(variables, function(p){ as.vector(p) }))
+  P_REG <- P_REF + C_REG_withbias[, -1] 
 
   pred_mintshrink <- t(P_MINTSHRINK %*% t(Yhat_test_h))
   pred_mintols <- t(P_MINTOLS %*% t(Yhat_test_h))
@@ -356,34 +397,34 @@ save(file = info_file, list = c("A"))
   
   
   #### JOINT METHOD
-  print("doing joint ...")
-  print(base::date())
-  objreg_valid <- list(y = makey(Y_valid_h), X = makeX(Yhat_valid_h, my_bights), Y = Y_valid_h, Yhat = Yhat_valid_h)
-  objreg_test <- list(X = makeX(Yhat_test_h, my_bights), Yhat = Yhat_test_h)
-  nValid <- nrow(Yhat_valid_h)
-  foldid <- make_foldid(nValid, my_bights$nts, config$cvglmnet$nfolds)
-  config$cvglmnet$foldid <- foldid
-  if(regularization == "ridge"){
-    config_ridge <- config
-    config_ridge$glmnet$alpha <- 0
-    config_ridge$cvglmnet$alpha <- 0
-    config <- config_ridge
+  if(do.joint){
+    print("doing joint ...")
+    print(base::date())
+    objreg_valid <- list(y = makey(Y_valid_h), X = makeX(Yhat_valid_h, my_bights), Y = Y_valid_h, Yhat = Yhat_valid_h)
+    objreg_test <- list(X = makeX(Yhat_test_h, my_bights), Yhat = Yhat_test_h)
+    nValid <- nrow(Yhat_valid_h)
+    foldid <- make_foldid(nValid, my_bights$nts, config$cvglmnet$nfolds)
+    config$cvglmnet$foldid <- foldid
+    if(regularization == "ridge"){
+      config_ridge <- config
+      config_ridge$glmnet$alpha <- 0
+      config_ridge$cvglmnet$alpha <- 0
+      config <- config_ridge
+    }
+    obj_method <- list(algo = "LASSO", Ptowards = P_REF, config = config, selection = lambda_selection)
+    obj_learn <- new_learnreg(objreg_valid, my_bights, obj_method, TRUE, TRUE)
+    pred_joint <- new_predtest(objreg_test, my_bights, obj_learn)
+    print("joint done...")
+    print(base::date())
+  }else{
+    pred_joint <- pred_base
   }
-  obj_method <- list(algo = "LASSO", Ptowards = P_REF, config = config, selection = lambda_selection)
-  obj_learn <- new_learnreg(objreg_valid, my_bights, obj_method, TRUE, TRUE)
-  pred_joint <- new_predtest(objreg_test, my_bights, obj_learn)
-  print("joint done...")
-  print(base::date())
-  
   
 
-  myfile <- file.path(results.folder, paste("resultsINDEP_", experiment, "_", 
-                                            lambda_selection, "_", add.bias, "_", do.deseasonalization, ".Rdata", sep = ""))
-  save(file = myfile, list = c("pred_reg", "pred_mintshrink", "pred_mintols", "pred_bu", 
+  myfile <- file.path(results.folder, paste("resultsicml_", experiment, "_", lambda_selection, "_", 
+                                            add.bias, "_", do.log, "_", 
+                                            do.deseasonalization, "_", do.scaling, ".Rdata", sep = ""))
+  save(file = myfile, list = c("P_REF", "P_REG", "C_REG_withbias", "P_BU", "P_MINTSHRINK", "P_MINTOLS", 
+                               "variables", "pred_reg", "pred_mintshrink", "pred_mintols", "pred_bu", 
                                "pred_base", "pred_basebiased", "pred_joint", "Y_test_allh"))
 
-
-  
-  
-  
-  

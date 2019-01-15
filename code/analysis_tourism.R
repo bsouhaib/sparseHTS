@@ -4,10 +4,8 @@ source("nicefigs.R")
 library(plotrix)
 #######
 
-#experiment <- #"tourism" #"meters" #
-
 hierarchy_name <- "tourism"
-
+#hierarchy_name <- "wikipedia"
 
 do.agg <- TRUE
 hselected <- seq(2)
@@ -63,7 +61,7 @@ errors_all <- errors
 
 ###### INDEP
 do.deseasonalization <- TRUE
-add.bias <- TRUE
+add.bias <- FALSE
 naggts <- nrow(A)
 nbts <- ncol(A)
 myfile <- file.path(results.folder, paste("resultsINDEP_", hierarchy_name, "_", 
@@ -192,6 +190,50 @@ for(k in seq(2)){
 
 ###### ###### ###### ###### ###### 
 stop("done")
+
+experiment <- hierarchy_name
+obj_sort <- sort( (err_reg - err_mintshrink)[index_bottom], index = T)
+datasave_file <- file.path(results.folder, paste("datasave_", experiment, "_", do.deseasonalization, ".Rdata", sep = ""))
+load(datasave_file)
+savepdf("test")
+par(mfrow = c(3, 1))
+
+ids <- rev(tail(obj_sort$ix, 10))
+for(j in ids){
+  plot.ts(Z[, j])
+  plot.ts(cleaned_bts[, j])
+  plot.ts(bts[, j])
+  abline(v = c(86, 86 + 160, 86 + 160 + 120), col = "red")
+}
+dev.off()
+
+C <- P_REG - P_BU
+
+
+plotmat <- function(M){
+  X <- as.matrix(M)
+  X <- t(apply(X, 2, rev))
+  Xmelted <- melt(X)
+  ggplot(data = Xmelted, aes(x=Var1, y=Var2, fill= factor(value) )) + 
+    geom_tile() + 
+    scale_fill_manual(values = c('white','blue')) +
+    theme_bw()
+}
+
+plotmat(P_BU)
+plotmat( (C != 0)+0 )
+
+heatmap(C, Colv = NA, Rowv = NA, scale="column", 
+        col = colorRampPalette(brewer.pal(8, "Blues"))(25))
+
+
+res <- apply((ytrue_test - ypredbase_test)/ytrue_test, 2, mean) 
+#res <- apply((Y_valid_h - Yhat_valid_h)/Y_valid_h, 2, mean) 
+myindex <- index_bottom
+plot(res[myindex][-c(277, 280)], (err_reg[myindex] - err_mintshrink[myindex])[-c(277, 280)] )
+abline(h = 0, v = 0)
+
+
 
 #errors_all[[1]]
 #print(apply(apply(errors_all[[1]], c(1, 3), sum), 2, mean))

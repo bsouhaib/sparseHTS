@@ -1,65 +1,109 @@
-new_learnreg <- function(objreg, objhts, objmethod, standardizeX, centerY){
+new_learnreg <- function(objreg, objhts, objmethod, standardizeX = NULL, centerY = NULL){
   Y <- objreg$Y
   Yhat <- objreg$Yhat
-  
-  # Penalize towards a certain P matrix?
-  if(!is.null(objmethod$Ptowards)){
-    Y <- as.matrix(Y - Yhat %*% t(objmethod$Ptowards) %*% t(objhts$S))
-  }
-  
-  scaling_info <- NULL
-  if(centerY){
-    #
-    mu_Y <- colMeans(Y)
-    Y_centered <- t(t(Y) - mu_Y)
-    y <- fct_vec(Y_centered)
-    scaling_info$mu_Y <- mu_Y
-  }else{
-    y <- fct_vec(Y)
-  }
-  
-  if(standardizeX){
-    mu_Yhat <- colMeans(Yhat)
-    Yhat_centered <- t(t(Yhat) - mu_Yhat)
-    sd_Yhat <- apply(Yhat_centered, 2, sd)
-    
-    # Dealing with constant variables
-    id_constvar <- which(sd_Yhat == 0)
-    if(length(id_constvar) > 0)
-      sd_Yhat[id_constvar] <- 1
-    
-    Yhat_scaled <- t(t(Yhat_centered)/sd_Yhat)
-    
-    var_X_exclude <- NULL
-    if(length(id_constvar) > 0){
-      var_yhat_exclude <- rep(0, ncol(Yhat))
-      var_yhat_exclude[id_constvar] <- 1
-      var_X_exclude <- which(kronecker(rep(1, objhts$nbts), var_yhat_exclude) == 1)
-      
-      config$glmnet <- c(config$glmnet, list(exclude = var_X_exclude))
-      config$cvglmnet <- c(config$cvglmnet, list(exclude = var_X_exclude))
-    }
-    
-    scaling_info$mu_Yhat <- mu_Yhat
-    scaling_info$sd_Yhat <- sd_Yhat
-    
-    X <- makeX(Yhat_scaled, objhts)
-  }else{
-    X <- makeX(Yhat, objhts)
-  }
-  
   algo <- objmethod$algo
   config <- objmethod$config
-  model <- NULL
-  s <- NULL
-  if(algo == "LASSO" || algo == "gOLS"){
-    model <- do.call(glmnet, c(list(x = X, y = y), config$glmnet)) 
-    if(algo == "gOLS"){
-      s <- 0
-    }else if(algo == "LASSO"){
-      #mylambdas <- c(model$lambda, seq(tail(model$lambda, 1), 0,length.out = 10))
-      mylambdas <- model$lambda
+  
+  if(algo != "REG"){
+    # Penalize towards a certain P matrix?
+    if(!is.null(objmethod$Ptowards)){
+      Y <- as.matrix(Y - Yhat %*% t(objmethod$Ptowards) %*% t(objhts$S))
+    }
+    
+    scaling_info <- NULL
+    if(centerY){
+      #
+      mu_Y <- colMeans(Y)
+      Y_centered <- t(t(Y) - mu_Y)
+      y <- fct_vec(Y_centered)
+      scaling_info$mu_Y <- mu_Y
+    }else{
+      y <- fct_vec(Y)
+    }
+    
+    if(standardizeX){
+      mu_Yhat <- colMeans(Yhat)
+      Yhat_centered <- t(t(Yhat) - mu_Yhat)
+      sd_Yhat <- apply(Yhat_centered, 2, sd)
       
+      # Dealing with constant variables
+      id_constvar <- which(sd_Yhat == 0)
+      if(length(id_constvar) > 0)
+        sd_Yhat[id_constvar] <- 1
+      
+      Yhat_scaled <- t(t(Yhat_centered)/sd_Yhat)
+      
+      var_X_exclude <- NULL
+      if(length(id_constvar) > 0){
+        var_yhat_exclude <- rep(0, ncol(Yhat))
+        var_yhat_exclude[id_constvar] <- 1
+        var_X_exclude <- which(kronecker(rep(1, objhts$nbts), var_yhat_exclude) == 1)
+        
+        config$glmnet <- c(config$glmnet, list(exclude = var_X_exclude))
+        config$cvglmnet <- c(config$cvglmnet, list(exclude = var_X_exclude))
+      }
+      
+      scaling_info$mu_Yhat <- mu_Yhat
+      scaling_info$sd_Yhat <- sd_Yhat
+      
+      X <- makeX(Yhat_scaled, objhts)
+    }else{
+      X <- makeX(Yhat, objhts)
+    }
+    
+    model <- NULL
+    s <- NULL
+    if(algo == "LASSO" || algo == "gOLS"){
+      model <- do.call(glmnet, c(list(x = X, y = y), config$glmnet)) 
+      if(algo == "gOLS"){
+        s <- 0
+      }else if(algo == "LASSO"){
+        #mylambdas <- c(model$lambda, seq(tail(model$lambda, 1), 0,length.out = 10))
+        mylambdas <- model$lambda
+        
+        do.parallel <- FALSE
+        if(nb.cores.cv > 1){
+          do.parallel <- TRUE
+          registerDoMC(cores = nb.cores.cv)
+        }
+        model <- do.call(cv.glmnet, 
+                         c(list(x = X, y = y), 
+                           config$cvglmnet , 
+                           list(lambda = mylambdas), 
+                           list(parallel = do.parallel) ))
+                           #,
+                           #list(penalty.factor = weights_shrinkage)  ))
+        s <- ifelse(objmethod$selection == "min", "lambda.min", "lambda.1se")
+        #browser()
+        
+      }
+    }else if(algo == "GGLASSO"){
+      group1 <- rep(seq(objhts$nts), objhts$nbts)
+      #model <- cv.gglasso(x = as.matrix(X), y = y, group=group1, pred.loss="L2", foldid = config$cvglmnet$foldid, intercept = FALSE)
+      model <- do.call(cv.gglasso, c(list(x = as.matrix(X), y = y, group = group1, pred.loss = "L2"), config))
+      s <- ifelse(objmethod$selection == "min", "lambda.min", "lambda.1se")
+    }
+    obj_return <- list(model = model, s = s, scaling_info = scaling_info, objmethod = objmethod, 
+                       standardizeX = standardizeX, centerY = centerY)
+  }else{
+    s <- ifelse(objmethod$selection == "min", "lambda.min", "lambda.1se")
+    models <- variables <- vector("list", objhts$nbts)
+    P_REF <- objmethod$Ptowards
+    
+    for(j in seq(objhts$nbts)){
+      if(j%%10 == 0)
+        print(j)
+      
+      k <- objhts$naggts + j
+      Bk <- Y[, k]
+      X <- Yhat
+
+      B_towards_valid <- X %*% t(P_REF)
+      y <- Bk - B_towards_valid[, j]
+      
+      
+      model <- do.call(glmnet, c(list(x = X, y = y), config$glmnet)) 
+      mylambdas <- model$lambda
       do.parallel <- FALSE
       if(nb.cores.cv > 1){
         do.parallel <- TRUE
@@ -70,21 +114,13 @@ new_learnreg <- function(objreg, objhts, objmethod, standardizeX, centerY){
                          config$cvglmnet , 
                          list(lambda = mylambdas), 
                          list(parallel = do.parallel) ))
-                         #,
-                         #list(penalty.factor = weights_shrinkage)  ))
-      s <- ifelse(objmethod$selection == "min", "lambda.min", "lambda.1se")
-      #browser()
-      
+      models[[j]] <- model
+      variables[[j]] <- coef(model, s = s)
     }
-  }else if(algo == "GGLASSO"){
-    group1 <- rep(seq(objhts$nts), objhts$nbts)
-    #model <- cv.gglasso(x = as.matrix(X), y = y, group=group1, pred.loss="L2", foldid = config$cvglmnet$foldid, intercept = FALSE)
-    model <- do.call(cv.gglasso, c(list(x = as.matrix(X), y = y, group = group1, pred.loss = "L2"), config))
-    s <- ifelse(objmethod$selection == "min", "lambda.min", "lambda.1se")
+    obj_return <- list(models = models, s = s, objmethod = objmethod, variables = variables)
   }
   
-  obj_return <- list(model = model, s = s, scaling_info = scaling_info, objmethod = objmethod, 
-                     standardizeX = standardizeX, centerY = centerY)
+  obj_return
 } 
 
 new_predtest <- function(objreg, objhts, objlearn = NULL, svalue = NULL){
@@ -149,6 +185,17 @@ new_predtest <- function(objreg, objhts, objlearn = NULL, svalue = NULL){
       Ytilde_centered_test <-  Yhat_scaled %*% t(objlearn$P) %*% t(objhts$S)
       Ytilde_uncentered_test <- t((t(Ytilde_centered_test) + scaling_info$mu_Y))
       Ytilde_test <- Ytilde_uncentered_test
+  }else if(algo == "REG"){
+    P_REF <- objmethod$Ptowards
+    X_test <- objreg$Yhat
+    B_towards_test <- X_test %*% t(P_REF)
+    Btilde_test <- matrix(NA, nrow = nrow(X_test), ncol = objhts$nbts)
+    for(j in seq(objhts$nbts)){
+      Btilde_test[, j] <- predict(objlearn$models[[j]], X_test, s = objlearn$s) + B_towards_test[, j]
+    }
+    
+    Ytilde_test <- Btilde_test %*% t(objhts$S)
+    
   }else{
     stop("ERROR IN METHOD'S NAME")
   }
