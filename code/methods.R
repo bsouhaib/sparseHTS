@@ -94,13 +94,15 @@ new_learnreg <- function(objreg, objhts, objmethod, standardizeX = NULL, centerY
       if(j%%10 == 0)
         print(j)
       
+      #if(j == 261)
+      #  browser()
+      
       k <- objhts$naggts + j
       Bk <- Y[, k]
       X <- Yhat
 
       B_towards_valid <- X %*% t(P_REF)
       y <- Bk - B_towards_valid[, j]
-      
       
       model <- do.call(glmnet, c(list(x = X, y = y), config$glmnet)) 
       mylambdas <- model$lambda
@@ -109,6 +111,8 @@ new_learnreg <- function(objreg, objhts, objmethod, standardizeX = NULL, centerY
         do.parallel <- TRUE
         registerDoMC(cores = nb.cores.cv)
       }
+      
+
       model <- do.call(cv.glmnet, 
                        c(list(x = X, y = y), 
                          config$cvglmnet , 
@@ -117,7 +121,9 @@ new_learnreg <- function(objreg, objhts, objmethod, standardizeX = NULL, centerY
       models[[j]] <- model
       variables[[j]] <- coef(model, s = s)
     }
-    obj_return <- list(models = models, s = s, objmethod = objmethod, variables = variables)
+    C_REG_withbias <- t(sapply(variables, function(p){ as.vector(p) }))
+    Pmatrix <- P_REF + C_REG_withbias[, -1] 
+    obj_return <- list(models = models, s = s, objmethod = objmethod, variables = variables, P = Pmatrix)
   }
   
   obj_return
@@ -176,8 +182,25 @@ new_predtest <- function(objreg, objhts, objlearn = NULL, svalue = NULL){
     #  Ytilde_test <- Ytilde_uncentered_test
     #}
 
-  }else if(algo %in% c("BU", "MINT", "OLS") ){
-    Ytilde_test <-  objreg$Yhat %*% t(objlearn$P) %*% t(objhts$S)
+  }else if(algo %in% c("BU", "MINT", "ERM") ){
+    if(algo == "ERM"){
+      X <- objreg$Yhat
+      if(!is.null(objlearn$scale_info)){
+        X_center <- objlearn$scale_info$X_center
+        X_scale <- objlearn$scale_info$X_scale
+        B_center <- objlearn$scale_info$B_center
+        X <- t((t(X) - X_center)/X_scale)
+      }
+      
+      Btilde_test <- X %*% t(objlearn$P)
+      if(!is.null(objlearn$scale_info)){
+        Btilde_test <- t(t(Btilde_test) +  B_center)
+      }
+      Ytilde_test <-  Btilde_test %*% t(objhts$S)
+    }else{
+      Ytilde_test <-  objreg$Yhat %*% t(objlearn$P) %*% t(objhts$S)
+    }
+
   }else if(algo %in% c("OLSS")){
       Yhat <- objreg$Yhat
       scaling_info <- objlearn$scaling_info
@@ -210,10 +233,38 @@ bu <- function(objhts){
 }
 
 
-ols <- function(objreg, objhts){
+erm <- function(objreg, objhts){
+  #S <- objhts$S
+  #P_LS <- solve(t(S) %*% S) %*% t(S) %*% t(objreg$Y) %*% objreg$Yhat %*% solve(t(objreg$Yhat) %*% objreg$Yhat)
+  #list(objmethod = list(algo = "OLS"), P = P_LS)
+  
+
   S <- objhts$S
-  P_LS <- solve(t(S) %*% S) %*% t(S) %*% t(objreg$Y) %*% objreg$Yhat %*% solve(t(objreg$Yhat) %*% objreg$Yhat)
-  list(objmethod = list(algo = "OLS"), P = P_LS)
+  B <- objreg$Y[, seq(objhts$naggts + 1, objhts$nts)]
+  X <- objreg$Yhat
+  
+  scale_info <- NULL
+  do.scaling <- TRUE
+  if(do.scaling){
+    Bscaled <- scale(B, center = T, scale = F)
+    Xscaled <- scale(X, center = T, scale = T)
+    B_center <- attr(Bscaled, "scaled:center")
+    X_center <- attr(Xscaled, "scaled:center")
+    X_scale <- attr(Xscaled, "scaled:scale")
+    if(any(X_scale == 0) ){
+      id <- which(X_scale == 0)
+      X_scale[id] <- 1
+      Xscaled[, id] <- scale(X[, id, drop = F], center = T, scale = F)
+      X_center[id] <- apply(X[, id, drop = F], 2, mean)
+    }
+    scale_info <- list(B_center = B_center, X_center = X_center, X_scale = X_scale)
+    X <- Xscaled
+    B <- Bscaled
+  }
+  #browser()
+  
+  P_ERM <- t(B) %*% X %*% ginv(t(X) %*% X)
+  list(objmethod = list(algo = "ERM"), P = P_ERM, scale_info = scale_info)
 }
 
 olss <- function(objreg, objhts){
@@ -261,15 +312,16 @@ mint <- function(objhts, method = NULL, e_residuals = NULL, h = NULL){
   }else if(method == "sample"){
     n <- nrow(R1)
     W <- crossprod(R1) / n
-    if(is.positive.definite(W)==FALSE)
-    {
-      stop("MinT needs covariance matrix to be positive definite.", call. = FALSE)
-    }
+    #if(is.positive.definite(W)==FALSE)
+    #{
+    #  stop("MinT needs covariance matrix to be positive definite.", call. = FALSE)
+    #}
   }
  
   MAT1 <- W %*% U
   MAT2 <- crossprod(U,MAT1)
-  MAT3 <- tcrossprod(solve(MAT2), U)
+  MAT3 <- tcrossprod(ginv(as.matrix(MAT2)), U)
+  # MAT3 <- tcrossprod(solve(MAT2), U)
   C1 <- J %*% MAT1
   P_MINT <- P_BU - C1 %*% MAT3
   

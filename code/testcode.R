@@ -69,7 +69,7 @@ rolling.forecast <- function(series, list_subsets, H, config_forecast, refit_ste
       learn_series <- series[seq(ts_split[1], ts_split[2])]
     }
     
-    #browser()
+    browser()
 
     if( (i-1) %% refit_step == 0){
       #model <- fit_fct(learn_series, fmethod)
