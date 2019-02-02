@@ -20,7 +20,7 @@ for(ihts in seq(50)){
   colnames(Z) <- cnames
   #id_available <- setdiff(id_available, id)
   
-  save(file = file.path(rdata.folder, paste("elec", ihts,".Rdata", sep = "")), list = c("Z", "id"))
+  save(file = file.path(rdata.folder, paste("elec-", ihts,".Rdata", sep = "")), list = c("Z", "id"))
 }
 
 

@@ -3,6 +3,10 @@ source("config_paths.R")
 source("nicefigs.R")
 library(ggplot2)
 library(reshape2)
+library(gridExtra)
+library(grid)
+library(lattice)
+
 plotmat <- function(M, option = c(1, 2)){
   X <- as.matrix(M)
   X <- t(apply(X, 2, rev))
@@ -60,7 +64,7 @@ makePlot <- function(M, title = ""){
   g
 }
 
-experiment <- "elec1"
+experiment <- "road_traffic-1"
 algobf <- "arima"
 refit_step <- ifelse(experiment == "tourism", 12, 14)
 
@@ -71,11 +75,9 @@ do.deseasonalization <- TRUE
 do.scaling <- FALSE
 tag <- paste(do.log, "_", do.deseasonalization, "_", do.scaling, sep = "")
 
-
-if(grepl("elec", experiment) ){
-  info_file <- file.path(results.folder, 
-                         paste("info_", "elec1" , ".Rdata", sep = ""))
-}
+exp <- unlist(strsplit(experiment, "-"))[1]
+info_file <- file.path(results.folder, 
+                         paste("info_", exp , ".Rdata", sep = ""))
 load(info_file)
 
 #
@@ -91,6 +93,16 @@ myfile <- file.path(results.folder, paste("resultsicml_", experiment, "_", lambd
                                           add.bias, "_", tag, "_", algobf, ".Rdata", sep = ""))
 load(myfile)
 
+
+savepdf(paste(experiment, "_", "allP", sep = ''), width = 21 * 0.95, height = 29.7 * 0.2)
+g1 <- makePlot(abs(as.matrix(allP[["MINTshr"]])), "MINTshr")
+g2 <- makePlot(abs(as.matrix(allP[["ERM"]])), "ERM")
+g3 <- makePlot(abs(as.matrix(allP[["ERMreg"]])), "ERMreg")
+g4 <- makePlot(abs(as.matrix(allP[["ERMregbu"]])), "ERMregbu")
+print(grid.arrange(g1, g2, g3, g4, nrow = 1))
+dev.off()
+
+stop("done")
 
 ######
 yhat <- results_h1$BASE
@@ -128,22 +140,14 @@ for(exp in c("small-1", "road_traffic1", "wikipedia1", "elec1")){
 stop("done")
 
 
-savepdf(paste(experiment, "_", "allP", sep = ''), width = 21 * 0.95, height = 29.7 * 0.2)
-g1 <- makePlot(abs(as.matrix(allP[["MINTshr"]])), "MINTshr")
-g2 <- makePlot(abs(as.matrix(allP[["ERM"]])), "ERM")
-g3 <- makePlot(abs(as.matrix(allP[["REG"]])), "REG")
-g4 <- makePlot(abs(as.matrix(allP[["REGBU"]])), "REGBU")
-grid.arrange(g1, g2, g3, g4, nrow = 1)
-dev.off()
 
-stop("done")
 
 
 savepdf(paste(experiment, "_", "allP", sep = ''))
 print(plotmat(P_BU, 2))
 print(plotmat(abs(allP[["MINTshr"]]), 2))
-print(plotmat(abs(allP[["REG"]]), 2))
-print(plotmat(abs(allP[["REGBU"]]), 2))
+print(plotmat(abs(allP[["ERMreg"]]), 2))
+print(plotmat(abs(allP[["ERMregbu"]]), 2))
 dev.off()
 
 stop("done")
@@ -154,14 +158,14 @@ PMINT <- allP[["MINTshr"]]
 print(plotmat(abs(PMINT), 2))
 dev.off()
 
-savepdf(paste(experiment, "_", "C-REGBU", sep = ''))
-Pmatrix <- allP[["REGBU"]]
+savepdf(paste(experiment, "_", "C-ERMregbu", sep = ''))
+Pmatrix <- allP[["ERMregbu"]]
 C <- Pmatrix - P_BU
 print(plotmat( (C != 0)+0, 1))
 dev.off()
 
-savepdf(paste(experiment, "_", "C-REG", sep = ''))
-PREG <- allP[["REG"]]
+savepdf(paste(experiment, "_", "C-ERMreg", sep = ''))
+PREG <- allP[["ERMreg"]]
 C <- PREG - P_BU
 print(plotmat( (C != 0)+0, 1))
 dev.off()

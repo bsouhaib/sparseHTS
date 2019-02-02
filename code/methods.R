@@ -4,7 +4,7 @@ new_learnreg <- function(objreg, objhts, objmethod, standardizeX = NULL, centerY
   algo <- objmethod$algo
   config <- objmethod$config
   
-  if(algo != "REG"){
+  if(algo != "ERMreg"){
     # Penalize towards a certain P matrix?
     if(!is.null(objmethod$Ptowards)){
       Y <- as.matrix(Y - Yhat %*% t(objmethod$Ptowards) %*% t(objhts$S))
@@ -208,7 +208,7 @@ new_predtest <- function(objreg, objhts, objlearn = NULL, svalue = NULL){
       Ytilde_centered_test <-  Yhat_scaled %*% t(objlearn$P) %*% t(objhts$S)
       Ytilde_uncentered_test <- t((t(Ytilde_centered_test) + scaling_info$mu_Y))
       Ytilde_test <- Ytilde_uncentered_test
-  }else if(algo == "REG"){
+  }else if(algo == "ERMreg"){
     P_REF <- objmethod$Ptowards
     X_test <- objreg$Yhat
     B_towards_test <- X_test %*% t(P_REF)
@@ -262,8 +262,8 @@ erm <- function(objreg, objhts){
     B <- Bscaled
   }
   #browser()
-  
   P_ERM <- t(B) %*% X %*% ginv(t(X) %*% X)
+  #P_ERM <- t(B) %*% X %*% ginv(t(X) %*% X + 0.1 * diag(ncol(X)))
   list(objmethod = list(algo = "ERM"), P = P_ERM, scale_info = scale_info)
 }
 

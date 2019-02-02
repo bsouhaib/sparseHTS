@@ -4,18 +4,18 @@ args = (commandArgs(TRUE))
 if(length(args) == 0){
   #experiment <- "tourism-Hol"  # "tourism-Oth" "tourism-Vis"   # "tourism-Hol"  # "tourism-Bus" 
   #experiment <- "wikipedia26"
-  #experiment <- "road_traffic3"
+  #experiment <- "road_traffic-3"
   #experiment <- "elec1"
   
   
-  #experiment <- "wikipedia" ; nbruns <- 70;
+  #experiment <- "wikipedia" ; nbruns <- 100;
   #experiment <- "tourism" ; nbruns <- 3;
-  #experiment <- "large"; nbruns <- 100
-  #experiment <- "road_traffic" ; nbruns <- 50;
-  experiment <- "elec" ; nbruns <- 50;
+  experiment <- "small"; nbruns <- 100
+  #experiment <- "road_traffic" ; nbruns <- 100;
+  #experiment <- "elec" ; nbruns <- 45;
   
-  algobf <- "arima"
-  
+  algobf <- "all"
+
 }else{
   
   for(i in 1:length(args)){
@@ -41,17 +41,10 @@ do.diffbase <- F
 
 info_file <- file.path(results.folder, 
                          paste("info_", experiment , ".Rdata", sep = ""))
-if(grepl("wikipedia", experiment) ){
+if(!file.exists(info_file)){
+  exp <- unlist(strsplit(experiment, "-"))[1]
   info_file <- file.path(results.folder, 
-                         paste("info_", "wikipedia1" , ".Rdata", sep = ""))
-}
-if(grepl("road_traffic", experiment) ){
-  info_file <- file.path(results.folder, 
-                         paste("info_", "road_traffic1" , ".Rdata", sep = ""))
-}
-if(grepl("elec", experiment) ){
-  info_file <- file.path(results.folder, 
-                         paste("info_", "elec1" , ".Rdata", sep = ""))
+                         paste("info_", exp , ".Rdata", sep = ""))
 }
 load(info_file)
 
@@ -81,18 +74,6 @@ if(experiment == "small" || experiment == "large"){
 if(experiment %in% c("small", "large", "wikipedia", "tourism", "road_traffic", "elec")){
   list_ids <- seq(nbruns)
   set_experiments <- paste(experiment, list_ids, sep = '-')
-  if(experiment == "wikipedia"){
-    set_experiments <- paste(experiment, list_ids, sep = "")
-    
-    #print("ATTENTION !!!!!!!!!!")
-    #list_ids <- setdiff(list_ids, c(21, 26, 35))
-    #set_experiments <- paste(experiment, list_ids, sep = "")
-    
-  }else if(experiment == "tourism"){
-    set_experiments <- c("tourism-Hol", "tourism-Bus", "tourism-Oth")
-  }else if(experiment == "road_traffic" || experiment == "elec"){
-    set_experiments <- paste(experiment, list_ids, sep = "")
-  }
 }else{
   set_experiments <- experiment
 }
@@ -104,8 +85,11 @@ if(algobf == "all")
 current_finalmat <- NULL
 for(algo_bforecasting in setalgos){
 
+set_experiments <- set_experiments[-c(40)] 
 list_ferrors <- vector("list", length(set_experiments))
+
 for(k in seq_along(set_experiments) ){
+  print(k)
   exp <- set_experiments[k]
   myfile <- file.path(results.folder, paste("resultsicml_", exp, "_", lambda_selection, "_", 
                                             add.bias, "_", do.log, "_", 
@@ -116,23 +100,47 @@ for(k in seq_along(set_experiments) ){
     }
     load(myfile) 
     
-    FUTURE <- Y_test_h
-    
-    if(do.skipoutliers && grepl("wikipedia", experiment)){
-      m <- lapply(seq(ncol(FUTURE)), function(j){ tsoutliers(ts(FUTURE[, j], freq = 7))$index }) 
+    if(experiment == "small" || experiment == "large"){
+      mynames <- names(results_h1) 
+      mynames[which(mynames == "REG")] <- "ERMreg"
+      mynames[which(mynames == "REGBU")] <- "ERMregbu"
+      names(results_h1) <- mynames
     }
     
+    FUTURE <- Y_test_h
+    
+    if(do.skipoutliers){
+      tag <- paste(do.log, "_", do.deseasonalization, "_", do.scaling, sep = "")
+      datasave_file <- file.path(results.folder, paste("datasave_", exp, "_", tag ,".Rdata", sep = ""))
+      load(datasave_file)
+      
+      idoutliers <- lapply(outindex, function(setoutliers){
+        idx <- which(setoutliers > T_train + T_valid)
+        ret <- NULL
+        if(length(idx) > 0){
+          ret <- setoutliers[idx] - (T_train + T_valid) 
+        }
+        ret
+      })
+      
+      m <- lapply(seq(ncol(FUTURE)), function(j){ tsoutliers(ts(FUTURE[, j], freq = 7))$index }) 
+    }
+    #print(k)
     res <- sapply(results_h1, function(results_method){
-      matres <- (results_method - FUTURE)^2
-      if(do.skipoutliers && grepl("wikipedia", experiment)){
+      #print(dim(results_method))
+    matres <- (results_method - FUTURE)^2
+      if(do.skipoutliers){
         matres <- sapply(seq(ncol(matres)), function(j){ 
           x <- matres[, j]
-          idna <- m[[j]] 
-          if(length(idna) > 0){
-            x[idna] <- NA
+          if(j > nrow(A)){
+            idna <- idoutliers[[j - nrow(A)]] - 1 # because we start at two
+            if(length(idna) > 0){
+              x[idna] <- NA
+            }
           }
           x
         })
+
       }
       matres
     }, simplify = "array")
@@ -151,13 +159,15 @@ for(k in seq_along(set_experiments) ){
       errors_agg <- cbind(apply(errors, 1, sum), errors_agg)
     }else{
       errors_agg <- apply(errors[, index_bottom], 1, sum)
-      errors_agg <- cbind(apply(errors[, index_agg], 1, sum), errors_agg)
+      #errors_agg <- cbind(apply(errors[, index_agg], 1, sum), errors_agg)
       errors_agg <- cbind(apply(errors, 1, sum), errors_agg)
     }
     
 
     
     row.names(errors_agg) <- row.names(errors)
+    # print("problem was here")
+    # row.names(errors_agg) <-  c("ERM", "ERMreg", "ERMregbu", "BU", "MINTshr", "MINTsam", "MINTols")
     list_ferrors[[k]] <- errors_agg
 }
 
@@ -165,7 +175,7 @@ for(k in seq_along(set_experiments) ){
 # check errors wikipedia
 if(FALSE){
   
-  sort(sapply(list_ferrors, function(mat){mat["REG-PBU", 1]}) - 
+  sort(sapply(list_ferrors, function(mat){mat["ERMregbu", 1]}) - 
     sapply(list_ferrors, function(mat){mat["MINTshr", 1]}) )
   
   tag <- paste(do.log, "_", do.deseasonalization, "_", do.scaling, sep = "")
@@ -239,15 +249,23 @@ if(do.diffbase){
 all_ferrors <- simplify2array(list_ferrors)
 avg_ferrors <- apply(all_ferrors, c(1, 2), mean)
 stderrors <- apply(all_ferrors, c(1, 2), sd)/sqrt(length(list_ferrors))
-  
-order_methods <- c("BASE", "BU", "ERM", "REG", "REGBU", "MINTsam", "MINTols", "MINTshr")
-###order_methods <- c("BASE", "BU",  "REG", "REG-PBU", "MINTols", "MINTshr")
+
+if(experiment == "small" || experiment == "large"){
+  order_methods <- c("BASE", "BU", "ERM", "ERMreg", "ERMregbu", "MINTsam", "MINTols", "MINTshr")
+  nrgroup <- c(2, 3, 3)
+}else{
+  order_methods <- c("BASE", "BU", "ERMreg", "ERMregbu", "MINTols", "MINTshr")
+  nrgroup <- c(2, 2, 2)
+}
+
 final_avg_ferrors <- avg_ferrors[order_methods, ]
 final_stderrors <- stderrors[order_methods, ]
 if(do.simplify){
-  colnames(final_avg_ferrors) <- c(paste("All levels ", "(", sum(table(niveaus)), ")", sep = ''), 
-                                   paste("Upper levels ", "(", length(index_agg), ")" , sep = ""), 
-                                   paste("Bottom level ", "(", length(index_bottom), ")" , sep = "") )
+  ###  colnames(final_avg_ferrors) <- c(paste("All levels ", "(", sum(table(niveaus)), ")", sep = ''), 
+  ###                                 paste("Upper levels ", "(", length(index_agg), ")" , sep = ""), 
+  ###                                 paste("Bottom level ", "(", length(index_bottom), ")" , sep = "") )
+  
+  colnames(final_avg_ferrors) <- c("All", "Bottom")
 }else{
   colnames(final_avg_ferrors) <- c(paste("All levels ", "(", sum(table(niveaus)), ")", sep = ''), 
                                    paste("Level ", unique(niveaus), 
@@ -298,30 +316,11 @@ tablefile <- paste("_table", "_", experiment, "_", lambda_selection, "_", add.bi
 v <- latex(finalmat, star = TRUE, 
            #title = paste(experiment, " - ", algo_bforecasting, sep = ""),
            cgroup = toupper(setalgos),
-           n.cgroup = rep(3, length(setalgos)),
-           rgroup=NULL, n.rgroup=c(2, 3, 3),
+           n.cgroup = rep( ncol(final_avg_ferrors), length(setalgos)),
+           rgroup=NULL, n.rgroup= nrgroup,
       title = "",
       file = file.path(pdf.folder, tablefile), booktabs = T, table.env = F, center = "none")
 
-stop("done")
-
   
 
-
-
-
-#print(final_stderrors)
-
-#tablefile <- paste("table", "_", experiment, "_", lambda_selection, "_", add.bias, "_", 
-#             do.log, "_",  do.deseasonalization, "_", do.scaling, "_", algobf, ".tex", sep = "")
-#stargazer(finalmat, title = paste(experiment, " - ", algobf, sep = ""), 
-#          out = file.path(pdf.folder, tablefile),
-#          float.env= "table*")
-print(errors_agg[c("BASE", "BU", "REG", "REGBU", "MINTshr", "MINTols", "L1", "L1-PBU"), ])
-print(t(t(errors_agg) - errors_agg["BASE", ]))
-x <- t(t(errors_agg) - errors_agg["BASE", ])
-  #if(experiment == "tourism")
-  #  x <- x / 1000
-print(format(x[c("BASE", "BU", "REG", "REGBU", "MINTshr", "MINTols", "L1", "L1-PBU"), ], digits = 2))
-  
   

@@ -1,19 +1,20 @@
 rm(list = ls())
 assign("last.warning", NULL, envir = baseenv())
 args = (commandArgs(TRUE))
-if(length(args) == 0 || length(args) == 1){
+if(length(args) == 0 || length(args) == 2){
   
-  if(FALSE){
-    if(length(args) == 1){
+  if(TRUE){
+    if(length(args) == 2){
       experiment <- args[[1]]
+      algobf <- args[[2]]
     }else{
       #experiment <- "tourism-Vis" #"tourism-Bus" #"tourism-Oth"  #"tourism-Hol"  
-      #experiment <- "wikipedia5"
-      #experiment <- "road_traffic1"
-      experiment <- "elec1"
+      experiment <- "wikipedia-1"
+      #experiment <- "road_traffic-1"
+      #experiment <- "elec-1"
+      algobf <- "arima"
     }
     add.bias <- FALSE
-    algobf <- "arima"
     
     #do.log <- ifelse(experiment == "tourism", FALSE, TRUE)
     do.log <- TRUE
@@ -97,7 +98,7 @@ tag <- paste(do.log, "_", do.deseasonalization, "_", do.scaling, sep = "")
 H <- 2
 
 #name_methods <- c("L1", "REG", "REG-PBU", "L1-PBU", "BU", "MINTshr", "MINTols")
-name_methods <- c("REG", "REGBU", "BU", "MINTshr", "ERM", "MINTsam", "MINTols")
+name_methods <- c("ERM", "ERMreg", "ERMregbu", "BU", "MINTshr", "MINTsam", "MINTols")
  #name_methods <- c("REG", "REGBU", "BU", "MINTshr")
 
 
@@ -191,8 +192,12 @@ if(grepl("tourism", experiment)){
   T_train <- 86
   T_valid <- 160
   T_test <- 120
-}else if(grepl("road_traffic", experiment) || grepl("elec", experiment)){
-  T_train <- 7*17
+}else if(grepl("road_traffic", experiment)){
+  T_train <- 7*17 + 1
+  T_valid <- 7*17 + 1
+  T_test <- 7*18
+}else if(grepl("elec", experiment)){
+  T_train <- 7*17 
   T_valid <- 7*17 + 1
   T_test <- 7*18
 }
@@ -214,19 +219,28 @@ if(grepl("tourism", experiment) || grepl("wikipedia", experiment)
   }
 }
 
+
 if(do.cleaning){
   istart <- 1
-  iend <- T_train + T_valid
-  if(grepl("road_traffic", experiment) || grepl("elec", experiment)){
-    iend <- T_train + T_valid + T_test
-  }
-  idx <- seq(istart, iend)
-  cleaned_bts <- sapply(seq(ncol(bts)), function(j){
+  iend <- T_train + T_valid + T_test
+  
+  #iend <- T_train + T_valid
+  #if(grepl("road_traffic", experiment) || grepl("elec", experiment)){
+  #iend <- T_train + T_valid + T_test
+  #}
+  #idx <- seq(istart, iend)
+  obj_clean <- lapply(seq(ncol(bts)), function(j){
+    #x[idx] <- tsclean(subset(x, start = istart, end = iend))
+    #x
     x <- bts[, j]
-    x[idx] <- tsclean(subset(x, start = istart, end = iend))
-    x
-    #tsclean(bts[, j])
+    outliers <- tsoutliers(x)
+    x[outliers$index] <- outliers$replacements
+
+    x <- na.interp(x)
+    list(outindex = outliers$index, x = x)
   })
+  cleaned_bts <- sapply(obj_clean, "[[", "x")
+  outindex <- lapply(obj_clean, "[[", "outindex")
   bts <- cleaned_bts
 
 }
@@ -269,10 +283,11 @@ if(grepl("tourism", experiment)){
   bts <- ts(bts, freq = 7)
 }
 
+
 if(grepl("tourism", experiment) || grepl("wikipedia", experiment) 
    || grepl("road_traffic", experiment) || grepl("elec", experiment)){
   datasave_file <- file.path(results.folder, paste("datasave_", experiment, "_", tag ,".Rdata", sep = ""))
-  save(file = datasave_file, list = c("Z", "bts", "cleaned_bts"))
+  save(file = datasave_file, list = c("Z", "bts", "cleaned_bts", "outindex", "T_train", "T_valid", "T_test"))
 }
 
 
@@ -351,11 +366,7 @@ stopifnot(T_all == nrow(bts))
 my_bights <- bights(bts, A)
 
 
-exp <- experiment
-if(grepl("small", experiment) || grepl("large", experiment)){
-  exp <- unlist(strsplit(experiment, "-"))[1]
-}
-
+exp <- unlist(strsplit(experiment, "-"))[1]
 info_file <- file.path(results.folder, paste("info_", exp, ".Rdata", sep = ""))
 save(file = info_file, list = c("A", "niveaus"))
 
@@ -487,10 +498,10 @@ config_reg$cvglmnet$foldid <- foldid_reg
 results <- mclapply(name_methods, function(current_method){
   #print(paste(base::date(), " - ", current_method, sep = ""))
   obj_method <- NULL
-  if(current_method == "REGBU"){
-    obj_method <- list(algo = "REG", Ptowards = pbu(my_bights), config = config_reg, selection = lambda_selection)
-  }else if(current_method == "REG"){
-    obj_method <- list(algo = "REG", Ptowards = P_0, config = config_reg, selection = lambda_selection)
+  if(current_method == "ERMregbu"){
+    obj_method <- list(algo = "ERMreg", Ptowards = pbu(my_bights), config = config_reg, selection = lambda_selection)
+  }else if(current_method == "ERMreg"){
+    obj_method <- list(algo = "ERMreg", Ptowards = P_0, config = config_reg, selection = lambda_selection)
   }else if(current_method == "BU"){
     obj_learn <- bu(my_bights)
   }else if(grepl("MINT", current_method)){
@@ -537,9 +548,12 @@ names(results) <- name_methods
 results[["BASE"]]   <- list(obj_learn = NULL, predictions = t(Yhat_test_allh[h, , ]))
 results[["BASE2"]]   <- list(obj_learn = NULL, predictions = t(save_Yhat_test_allh[h, , ]))
 
+
 # results_allh[[h]] <-  results ONLY NEED PREDICTIONS + SAVE SPACE
 results_h1 <- lapply(results , "[[", "predictions")
 allP <- lapply(lapply(results , "[[", "obj_learn"), "[[", "P")
+
+print(names(results_h1))
 
 myfile <- file.path(results.folder, paste("resultsicml_", experiment, "_", lambda_selection, "_", 
                                           add.bias, "_", tag, "_", algobf, ".Rdata", sep = ""))

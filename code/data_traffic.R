@@ -90,7 +90,7 @@ myres[seq(nrow(res)), which(mystatus == "OK")] <- res
 m <- seq(dmy("01/01/2008"), dmy("30/03/2009"), by = "day")
 id <- which(year(m) == 2008)
 DT <- myres[, id]
-save(file = file.path(main.folder, "data", "road_trafficDT.Rdata"), list = c("DT"))
+save(file = file.path(rdata.folder, "road_trafficDT.Rdata"), list = c("DT"))
 
 stop("done")
 
