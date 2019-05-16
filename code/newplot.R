@@ -97,8 +97,10 @@ load(myfile)
 savepdf(paste(experiment, "_", "allP", sep = ''), width = 21 * 0.95, height = 29.7 * 0.2)
 g1 <- makePlot(abs(as.matrix(allP[["MINTshr"]])), "MINTshr")
 g2 <- makePlot(abs(as.matrix(allP[["ERM"]])), "ERM")
-g3 <- makePlot(abs(as.matrix(allP[["ERMreg"]])), "ERMreg")
-g4 <- makePlot(abs(as.matrix(allP[["ERMregbu"]])), "ERMregbu")
+#g3 <- makePlot(abs(as.matrix(allP[["ERMreg"]])), "ERMreg")
+#g4 <- makePlot(abs(as.matrix(allP[["ERMregbu"]])), "ERMregbu")
+g3 <- makePlot(abs(as.matrix(allP[["L1"]])), "ERMreg")
+g4 <- makePlot(abs(as.matrix(allP[["L1-PBU"]])), "ERMregbu")
 print(grid.arrange(g1, g2, g3, g4, nrow = 1))
 dev.off()
 
@@ -132,7 +134,7 @@ for(exp in c("small-1", "road_traffic1", "wikipedia1", "elec1")){
       X <- Z[, seq(3)]
     }
     colnames(X) <- rep("", ncol(X))
-    plot.ts(X, main = "", ylab = "", lwd = 2)
+    plot.ts(X, main = "", ylab = "", lwd = 4)
   #}
   dev.off()
 }

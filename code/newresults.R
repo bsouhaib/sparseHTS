@@ -9,12 +9,16 @@ if(length(args) == 0){
   
   
   #experiment <- "wikipedia" ; nbruns <- 100;
-  #experiment <- "tourism" ; nbruns <- 3;
-  experiment <- "small"; nbruns <- 100
   #experiment <- "road_traffic" ; nbruns <- 100;
+  
+  #experiment <- "small"; nbruns <- 100
+  experiment <- "large"; nbruns <- 100
+  
+  #experiment <- "tourism" ; nbruns <- 3;
   #experiment <- "elec" ; nbruns <- 45;
   
   algobf <- "all"
+  #algobf <- "arima"
 
 }else{
   
@@ -145,6 +149,10 @@ for(k in seq_along(set_experiments) ){
       matres
     }, simplify = "array")
     
+    if(experiment == "large"){
+      res <- res / 100
+    }
+    
     errors <- t(apply(res, c(2, 3), mean, na.rm = T))
     
     if(!do.simplify){
@@ -251,15 +259,30 @@ avg_ferrors <- apply(all_ferrors, c(1, 2), mean)
 stderrors <- apply(all_ferrors, c(1, 2), sd)/sqrt(length(list_ferrors))
 
 if(experiment == "small" || experiment == "large"){
-  order_methods <- c("BASE", "BU", "ERM", "ERMreg", "ERMregbu", "MINTsam", "MINTols", "MINTshr")
+  #KDD  #order_methods <- c("BASE", "BU", "ERM", "ERMreg", "ERMregbu", "MINTsam", "MINTols", "MINTshr")
+  order_methods <- c("BASE", "BU", "ERM", "L1", "L1-PBU", "MINTsam", "MINTols", "MINTshr")
   nrgroup <- c(2, 3, 3)
 }else{
-  order_methods <- c("BASE", "BU", "ERMreg", "ERMregbu", "MINTols", "MINTshr")
+  #KDD  #order_methods <- c("BASE", "BU", "ERMreg", "ERMregbu", "MINTols", "MINTshr")
+  order_methods <- c("BASE", "BU", "L1", "L1-PBU", "MINTols", "MINTshr")
   nrgroup <- c(2, 2, 2)
 }
 
 final_avg_ferrors <- avg_ferrors[order_methods, ]
 final_stderrors <- stderrors[order_methods, ]
+
+
+change_name <- function(name_method){
+  RET <- name_method
+  if(name_method == "L1"){
+    RET <- "ERMreg"
+  }else if(name_method == "L1-PBU"){
+    RET <- "ERMregbu"
+  }
+  RET
+}
+row.names(final_avg_ferrors) <- sapply(row.names(final_avg_ferrors), change_name)
+
 if(do.simplify){
   ###  colnames(final_avg_ferrors) <- c(paste("All levels ", "(", sum(table(niveaus)), ")", sep = ''), 
   ###                                 paste("Upper levels ", "(", length(index_agg), ")" , sep = ""), 

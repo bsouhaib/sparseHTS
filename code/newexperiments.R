@@ -88,18 +88,19 @@ redo.basef <- FALSE
 use.intercept <- FALSE
 do.standardize <- ifelse(experiment %in% c("small", "large"), TRUE, FALSE)
 
-mc.cores.basef <- 6 #30 # 20
-mc.cores.methods <- 1 #4 #10 # mc.cores.basef  AND mc.cores.methods
-nb.cores.cv <- 6 #3
+mc.cores.basef <-   1 #6          #30 # 20
+mc.cores.methods <- 1 #1          #4 #10 # mc.cores.basef  AND mc.cores.methods
+nb.cores.cv <-      6 #6          #3
 
 tag <- paste(do.log, "_", do.deseasonalization, "_", do.scaling, sep = "")
 
 
 H <- 2
 
+#name_methods <- c("REG", "REGBU", "BU", "MINTshr")
 #name_methods <- c("L1", "REG", "REG-PBU", "L1-PBU", "BU", "MINTshr", "MINTols")
-name_methods <- c("ERM", "ERMreg", "ERMregbu", "BU", "MINTshr", "MINTsam", "MINTols")
- #name_methods <- c("REG", "REGBU", "BU", "MINTshr")
+# KDD -> # name_methods <- c("ERM", "ERMreg", "ERMregbu", "BU", "MINTshr", "MINTsam", "MINTols")
+name_methods <- c("ERM", "L1", "L1-PBU", "BU", "MINTshr", "MINTsam", "MINTols")
 
 
 lambda_selection <- "min"  #"1se"
@@ -378,7 +379,7 @@ file_bf <- file.path(bf.folder,
 
 if(file.exists(file_bf) && !redo.basef){
   load(file_bf)
-  print("loading")
+  print("loaded")
 }else{
   print(base::date())
   print("base forecasting ...")
@@ -526,6 +527,8 @@ results <- mclapply(name_methods, function(current_method){
     }else{
       obj_method <- list(algo = "LASSO", Ptowards = pbu(my_bights), config = config_ridge, selection = lambda_selection)
     }
+  }else if(current_method == "MCE"){
+    obj_method <- list(algo = "MCE", Ptowards = NULL, config = config_ridge, selection = lambda_selection)
   }else{
     obj_learn <- NULL
   }

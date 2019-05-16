@@ -1,10 +1,12 @@
+
+
 new_learnreg <- function(objreg, objhts, objmethod, standardizeX = NULL, centerY = NULL){
   Y <- objreg$Y
   Yhat <- objreg$Yhat
   algo <- objmethod$algo
   config <- objmethod$config
   
-  if(algo != "ERMreg"){
+  if(algo != "ERMreg" && algo != "MRCE"){
     # Penalize towards a certain P matrix?
     if(!is.null(objmethod$Ptowards)){
       Y <- as.matrix(Y - Yhat %*% t(objmethod$Ptowards) %*% t(objhts$S))
@@ -85,6 +87,25 @@ new_learnreg <- function(objreg, objhts, objmethod, standardizeX = NULL, centerY
     }
     obj_return <- list(model = model, s = s, scaling_info = scaling_info, objmethod = objmethod, 
                        standardizeX = standardizeX, centerY = centerY)
+  }else if(algo == "MRCE"){
+    
+    S <- objhts$S
+    B <- Y[, -seq(objhts$naggts)]
+    omegaS <- t(S) %*% S
+    lam2.vec <- rev(10^seq(from=-2, to=0, by=0.5))
+    
+    browser()
+    
+    fit=mrce(X = Yhat, Y = B, lam1=10^(-1.5), lam2=10^(-0.5), method="single")
+    fit
+    lam2.mat=1000*(fit$Bhat==0)
+    refit=mrce(X = Yhat, Y = B, lam2=lam2.mat, method="fixed.omega", omega=omegaS, tol.in=1e-12) 
+    refit
+    
+    # ce code renvoit un NA/NaN/Inf in foreign function call 
+    res <- mrce(X = Yhat, Y = B, method = "fixed.omega", omega = omegaS, silent  = F, lam2.vec=lam2.vec)
+    
+    
   }else{
     s <- ifelse(objmethod$selection == "min", "lambda.min", "lambda.1se")
     models <- variables <- vector("list", objhts$nbts)
